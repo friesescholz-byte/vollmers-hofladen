@@ -168,7 +168,51 @@ export default function AdminPage({ onNavigate }) {
     });
   };
 
-  // 4. Direkt-Upload nach Cloudflare R2
+  // Client-seitige Bildkomprimierung (max 1600px, WebP Qualität 0.82)
+  const compressImage = (file, maxWidth = 1600, quality = 0.82) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Datei konnte nicht gelesen werden.'));
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onerror = () => reject(new Error('Bilddatei ist fehlerhaft oder konnte nicht geöffnet werden.'));
+        img.onload = () => {
+          let { width, height } = img;
+          if (width > maxWidth || height > maxWidth) {
+            if (width > height) {
+              height = Math.round((height * maxWidth) / width);
+              width = maxWidth;
+            } else {
+              width = Math.round((width * maxWidth) / height);
+              height = maxWidth;
+            }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            return resolve(e.target.result);
+          }
+          ctx.drawImage(img, 0, 0, width, height);
+
+          try {
+            let dataUrl = canvas.toDataURL('image/webp', quality);
+            if (!dataUrl.startsWith('data:image/webp')) {
+              dataUrl = canvas.toDataURL('image/jpeg', quality);
+            }
+            resolve(dataUrl);
+          } catch (err) {
+            resolve(e.target.result);
+          }
+        };
+        img.src = e.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // 4. Direkt-Upload nach Cloudflare R2 mit Fallback
   const handleImageUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -176,35 +220,45 @@ export default function AdminPage({ onNavigate }) {
     setIsUploadingImage(true);
 
     try {
-      const reader = new FileReader();
-      reader.onload = async (event) => {
-        const base64 = event.target?.result;
-        
-        const res = await fetch('/api/admin/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${sessionToken}`
-          },
-          body: JSON.stringify({
-            filename: file.name,
-            base64
-          })
-        });
+      showToast('Bild wird optimiert und hochgeladen...');
+      const compressedBase64 = await compressImage(file, 1600, 0.82);
 
-        const data = await res.json();
-        if (res.ok && data.success && data.url) {
-          setModalForm(prev => ({ ...prev, image: data.url }));
-          showToast('Bild erfolgreich optimiert und auf Cloudflare R2 hochgeladen!');
-        } else {
-          alert('Upload-Fehler: ' + (data.error || 'Unbekannt'));
-        }
-        setIsUploadingImage(false);
-      };
-      reader.readAsDataURL(file);
+      const res = await fetch('/api/admin/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionToken}`
+        },
+        body: JSON.stringify({
+          filename: file.name,
+          base64: compressedBase64
+        })
+      });
+
+      const text = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.warn('Nicht-JSON Antwort beim Upload:', text.slice(0, 100));
+      }
+
+      if (res.ok && data?.success && data?.url) {
+        setModalForm(prev => ({ ...prev, image: data.url }));
+        showToast('Bild erfolgreich hochgeladen!');
+      } else if (!res.ok && (res.status === 405 || res.status === 500 || res.status === 404)) {
+        // Fallback: Bei Backend-Verbindungsproblemen direkt das optimierte Bild lokal hinterlegen
+        setModalForm(prev => ({ ...prev, image: compressedBase64 }));
+        showToast('Bild übernommen (lokales Backup verwendet).');
+      } else {
+        alert('Upload-Fehler: ' + (data?.error || `HTTP ${res.status}`));
+      }
     } catch (err) {
+      console.error('Fehler beim Upload:', err);
       alert('Upload fehlgeschlagen: ' + err.message);
+    } finally {
       setIsUploadingImage(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -785,10 +839,6 @@ export default function AdminPage({ onNavigate }) {
                           onChange={handleImageUpload}
                         />
                       </label>
-
-                      <span className="text-[11px] text-ink-faint">
-                        Wird automatisch als WebP (Quality 85) in R2 gespeichert.
-                      </span>
                     </div>
                   </div>
                 </div>

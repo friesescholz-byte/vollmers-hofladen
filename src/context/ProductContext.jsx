@@ -13,16 +13,37 @@ export function ProductProvider({ children }) {
       setLoading(true);
       const res = await fetch('/api/products');
       if (res.ok) {
-        const data = await res.json();
-        if (data.products && Array.isArray(data.products) && data.products.length > 0) {
+        const text = await res.text();
+        let data = null;
+        try {
+          data = JSON.parse(text);
+        } catch (e) {
+          console.warn('Antwort von /api/products ist kein JSON:', text.slice(0, 50));
+        }
+
+        if (data?.products && Array.isArray(data.products) && data.products.length > 0) {
           setProducts(data.products);
           setSource(data.source || 'kv');
+          try {
+            localStorage.setItem('vollmers_cached_products', JSON.stringify(data.products));
+          } catch (e) {}
           return;
         }
       }
     } catch (err) {
-      console.warn('Fehler beim Abruf der Produkte aus der KV, nutze Standarddaten:', err);
+      console.warn('Fehler beim Abruf der Produkte aus der KV:', err);
     } finally {
+      // Fallback auf LocalStorage Cache falls vorhanden
+      try {
+        const cached = localStorage.getItem('vollmers_cached_products');
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setProducts(parsed);
+            setSource('local-cache');
+          }
+        }
+      } catch (e) {}
       setLoading(false);
     }
   };
@@ -32,6 +53,11 @@ export function ProductProvider({ children }) {
   }, []);
 
   const saveProductsToKV = async (updatedProducts, token) => {
+    // Vorab lokal cachen, damit keine Änderungen verloren gehen
+    try {
+      localStorage.setItem('vollmers_cached_products', JSON.stringify(updatedProducts));
+    } catch (e) {}
+
     const res = await fetch('/api/admin/products', {
       method: 'POST',
       headers: {
@@ -41,9 +67,19 @@ export function ProductProvider({ children }) {
       body: JSON.stringify({ products: updatedProducts })
     });
 
-    const data = await res.json();
-    if (!res.ok || !data.success) {
-      throw new Error(data.error || 'Fehler beim Speichern in der Cloudflare KV.');
+    const text = await res.text();
+    let data = null;
+    try {
+      data = JSON.parse(text);
+    } catch (e) {
+      if (res.status === 405) {
+        throw new Error('API-Endpunkt antwortet mit 405 (Method Not Allowed). Das Backend muss mit Routing aktualisiert werden.');
+      }
+      throw new Error(`Server antwortete mit HTTP ${res.status}: ${text.slice(0, 100) || res.statusText || 'Ungültige Serverantwort'}`);
+    }
+
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || `Fehler beim Speichern in der Cloudflare KV (HTTP ${res.status}).`);
     }
 
     setProducts(updatedProducts);

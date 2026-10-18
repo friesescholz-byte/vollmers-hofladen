@@ -1,3 +1,16 @@
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
+
+export async function onRequestOptions() {
+  return new Response(null, {
+    status: 204,
+    headers: corsHeaders
+  });
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
 
@@ -5,7 +18,7 @@ export async function onRequestPost(context) {
   if (!authHeader || !authHeader.includes('vollmer_session_')) {
     return new Response(JSON.stringify({ success: false, error: 'Nicht autorisiert' }), {
       status: 401,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', ...corsHeaders }
     });
   }
 
