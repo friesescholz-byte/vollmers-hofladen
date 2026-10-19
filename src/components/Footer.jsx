@@ -137,9 +137,6 @@ export default function Footer({ onNavigate, onOpenLegal }) {
               <p className="text-white/70 leading-relaxed">
                 Unser Selbstbedienungs-Hofladen in Machtsum steht dir an <strong>7 Tagen die Woche, rund um die Uhr</strong> zur Verfügung.
               </p>
-              <div className="text-[11px] text-white/50 pt-1 border-t border-white/10">
-                Barzahlung & Vertrauenskasse
-              </div>
             </div>
           </div>
 

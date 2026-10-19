@@ -445,12 +445,6 @@ export default function AdminPage({ onNavigate }) {
                 Hofladen Sortimentsverwaltung
               </h1>
             </div>
-            <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-ink-muted">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              <span>Cloudflare KV Live-Speicher aktiv ({source.toUpperCase()})</span>
-              <span className="hidden sm:inline">•</span>
-              <span className="hidden sm:inline">Bilder via Cloudflare R2 Pipeline</span>
-            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
@@ -888,12 +882,12 @@ export default function AdminPage({ onNavigate }) {
                     {isSaving ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Speichere in KV...</span>
+                        <span>Wird gespeichert...</span>
                       </>
                     ) : (
                       <>
                         <Save className="w-4 h-4" />
-                        <span>In Cloudflare KV speichern</span>
+                        <span>Produkt speichern</span>
                       </>
                     )}
                   </button>

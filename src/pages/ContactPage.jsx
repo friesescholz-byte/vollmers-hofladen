@@ -39,6 +39,9 @@ export default function ContactPage() {
               setErrorMessage("");
             },
             "expired-callback": () => setTurnstileToken(""),
+            "error-callback": (errorCode) => {
+              console.warn("Turnstile Widget-Status:", errorCode);
+            },
             theme: "light",
           });
           if (interval) clearInterval(interval);
@@ -89,8 +92,15 @@ export default function ContactPage() {
         })
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
+      const text = await res.text();
+      let data = null;
+      try {
+        data = JSON.parse(text);
+      } catch (parseErr) {
+        console.warn('Nicht-JSON Antwort beim Mailversand:', text.slice(0, 100));
+      }
+
+      if (res.ok && data?.success) {
         setSubmitted(true);
         setFormData({
           name: '',
@@ -101,7 +111,11 @@ export default function ContactPage() {
         });
         setTurnstileToken("");
       } else {
-        setErrorMessage(data.error || 'Fehler beim Versenden deiner Nachricht. Bitte versuche es erneut.');
+        setErrorMessage(data?.error || `Fehler beim Versenden deiner Nachricht (HTTP ${res.status}). Bitte versuche es erneut.`);
+        if (widgetIdRef.current && window.turnstile) {
+          try { window.turnstile.reset(widgetIdRef.current); } catch (e) {}
+        }
+        setTurnstileToken("");
       }
     } catch (err) {
       setErrorMessage('Verbindungsfehler beim Absenden der Nachricht. Bitte versuche es erneut.');
@@ -155,8 +169,8 @@ export default function ContactPage() {
                   <span>0:00 – 24:00 Uhr durchgehend</span>
                 </div>
                 <div>
-                  <strong className="block text-white text-sm">Bezahlung</strong>
-                  <span>Barzahlung & Vertrauenskasse</span>
+                  <strong className="block text-white text-sm">Selbstbedienung</strong>
+                  <span>365 Tage im Jahr geöffnet</span>
                 </div>
               </div>
             </div>
