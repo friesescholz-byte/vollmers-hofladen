@@ -98,21 +98,21 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
                 subtext="24/7 Hofladen"
               />
 
-              {/* Desktop & Mobil: Eier-Donnerstag CTA-Kachel */}
+              {/* Eier-Donnerstag CTA: Mobil dezent & kompakt als edle Pill, Desktop als raumgreifende Kachel */}
               <button
                 type="button"
                 onClick={() => onNavigate('eier-donnerstag')}
-                className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3.5 px-5 sm:px-6 py-3.5 h-[64px] sm:h-[68px] rounded-2xl bg-canvas-card border border-ink-border text-ink font-semibold text-sm hover:bg-canvas-muted hover:border-forest/50 transition-all shadow-subtle hover:shadow-elevated group text-left"
+                className="w-auto inline-flex items-center gap-2.5 sm:gap-3.5 px-3.5 sm:px-6 py-2 sm:py-3.5 sm:h-[68px] rounded-full sm:rounded-2xl bg-canvas-card/85 sm:bg-canvas-card border border-ink-border/80 hover:border-forest/50 text-ink font-medium sm:font-semibold text-xs sm:text-sm hover:bg-canvas-muted transition-all shadow-2xs sm:shadow-subtle hover:shadow-elevated group text-left"
               >
-                <div className="w-9 h-9 rounded-full bg-forest-tint border border-forest-border flex items-center justify-center text-forest group-hover:scale-110 transition-transform shrink-0">
-                  <EggIcon className="w-4 h-4" />
+                <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-full bg-forest-tint border border-forest-border flex items-center justify-center text-forest group-hover:scale-110 transition-transform shrink-0">
+                  <EggIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                 </div>
-                <div className="flex flex-col flex-1">
-                  <div className="flex items-center gap-1.5">
-                    <span>Machtsumer Eier-Donnerstag</span>
-                    <ArrowRight className="w-3.5 h-3.5 text-forest group-hover:translate-x-0.5 transition-transform" />
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    <span className="text-xs sm:text-sm">Machtsumer Eier-Donnerstag</span>
+                    <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-forest group-hover:translate-x-0.5 transition-transform" />
                   </div>
-                  <span className="text-[11px] font-normal text-ink-muted">
+                  <span className="hidden sm:block text-[11px] font-normal text-ink-muted">
                     Jetzt anmelden • Lieferung an die Haustür
                   </span>
                 </div>

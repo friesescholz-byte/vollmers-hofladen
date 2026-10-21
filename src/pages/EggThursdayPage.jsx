@@ -5,7 +5,7 @@ import { DELIVERY_TOWNS } from '../data/deliveryTowns';
 import EggIcon from '../components/EggIcon';
 import ThursdayMiniCalendar, { getNextThursdayISO, formatThursdayDE } from '../components/ThursdayMiniCalendar';
 
-const PRESET_QUANTITIES = [6, 10, 20, 30];
+const PRESET_QUANTITIES = [50, 70, 100, 150];
 
 export default function EggThursdayPage() {
   const [formData, setFormData] = useState({
@@ -13,7 +13,7 @@ export default function EggThursdayPage() {
     email: '',
     street: '',
     townId: 'machtsum',
-    eggCount: 10,
+    eggCount: 50,
     deliveryDate: getNextThursdayISO(),
     message: '',
   });
@@ -30,6 +30,11 @@ export default function EggThursdayPage() {
 
     if (!formData.name.trim() || !formData.email.trim() || !formData.street.trim() || !formData.eggCount || !formData.deliveryDate) {
       setErrorMessage('Bitte fülle alle Pflichtfelder (Name, E-Mail-Adresse, Ortschaft, Straße/Hausnummer und Eiermenge) aus.');
+      return;
+    }
+
+    if (Number(formData.eggCount) < 50) {
+      setErrorMessage('Die Mindestanzahl für den Eier-Donnerstag beträgt 50 Eier.');
       return;
     }
 
@@ -65,7 +70,7 @@ export default function EggThursdayPage() {
           email: '',
           street: '',
           townId: 'machtsum',
-          eggCount: 10,
+          eggCount: 50,
           deliveryDate: getNextThursdayISO(),
           message: '',
         });
@@ -169,7 +174,7 @@ export default function EggThursdayPage() {
                   <div>
                     <strong className="text-white block">Lieferung & Barzahlung an der Haustür</strong>
                     <span className="text-white/75 text-xs leading-relaxed block mt-0.5">
-                      Am Donnerstag liefern wir die Eier zu dir. Die Bezahlung erfolgt bequem und bar an der Haustür (oder per Vertrauenskasse bei Ablage).
+                      Am Donnerstag liefern wir die Eier zu dir. Die Bezahlung erfolgt bequem und bar an der Haustür.
                     </span>
                   </div>
                 </div>
@@ -289,9 +294,14 @@ export default function EggThursdayPage() {
 
                 {/* Eiermenge Auswahl */}
                 <div>
-                  <label className="block text-xs font-semibold text-ink uppercase tracking-wider mb-2">
-                    Gewünschte Anzahl Eier *
-                  </label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-xs font-semibold text-ink uppercase tracking-wider">
+                      Gewünschte Anzahl Eier *
+                    </label>
+                    <span className="text-[11px] font-semibold text-forest bg-forest-tint px-2.5 py-0.5 rounded-full border border-forest-border">
+                      Mindestens 50 Eier
+                    </span>
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3">
                     {PRESET_QUANTITIES.map((qty) => {
                       const isSelected = Number(formData.eggCount) === qty;
@@ -318,14 +328,15 @@ export default function EggThursdayPage() {
                     <div className="flex items-center gap-2">
                       <input
                         type="number"
-                        min={1}
-                        max={200}
+                        min={50}
+                        max={1000}
+                        step={10}
                         required
                         value={formData.eggCount}
                         onChange={(e) => setFormData({ ...formData, eggCount: e.target.value })}
                         className="w-24 px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-base sm:text-sm font-semibold focus:outline-none focus:border-forest"
                       />
-                      <span className="text-xs text-ink-faint">Stück</span>
+                      <span className="text-xs text-ink-faint">Stück (mind. 50)</span>
                     </div>
                   </div>
                 </div>
@@ -395,16 +406,16 @@ export default function EggThursdayPage() {
                   </div>
                 </div>
 
-                {/* Nachricht / Ablagehinweis */}
+                {/* Nachricht / Hinweis */}
                 <div>
                   <label className="block text-xs font-semibold text-ink uppercase tracking-wider mb-1.5">
-                    Nachricht oder Ablagehinweis (optional)
+                    Schreibe uns eine Nachricht oder Hinweis (optional)
                   </label>
                   <textarea
                     rows={3}
                     value={formData.message}
                     onChange={(e) => setFormData({ ...formData, message: e.target.value })}
-                    placeholder="Schreibe uns eine Nachricht oder einen Ablagehinweis (z.B. Korb vor der Haustür)..."
+                    placeholder="Schreibe uns eine Nachricht oder einen Hinweis..."
                     className="w-full px-4 py-3 rounded-xl bg-canvas border border-ink-border text-ink text-base sm:text-sm placeholder:text-ink-faint focus:outline-none focus:border-forest resize-none"
                   />
                 </div>

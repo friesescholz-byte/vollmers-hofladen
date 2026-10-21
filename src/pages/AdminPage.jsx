@@ -430,7 +430,7 @@ export default function AdminPage({ onNavigate }) {
       townId: 'machtsum',
       address: '',
       email: '',
-      eggCount: 10,
+      eggCount: 50,
       deliveryDate: getNextThursdayISO(),
       message: '',
       status: 'accepted',
@@ -1936,7 +1936,8 @@ export default function AdminPage({ onNavigate }) {
                     </label>
                     <input
                       type="number"
-                      min={1}
+                      min={50}
+                      step={10}
                       required
                       value={eggForm.eggCount}
                       onChange={(e) => setEggForm({ ...eggForm, eggCount: e.target.value })}
@@ -1985,13 +1986,13 @@ export default function AdminPage({ onNavigate }) {
 
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
-                    Deine Nachricht (optional)
+                    Nachricht oder Hinweis (optional)
                   </label>
                   <textarea
                     rows={2}
                     value={eggForm.message}
                     onChange={(e) => setEggForm({ ...eggForm, message: e.target.value })}
-                    placeholder="Schreibe uns eine Nachricht..."
+                    placeholder="Schreibe uns eine Nachricht oder einen Hinweis..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest resize-none"
                   />
                 </div>
