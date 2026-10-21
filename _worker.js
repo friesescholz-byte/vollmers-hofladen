@@ -118,7 +118,7 @@ async function sendCustomerDecisionEmail(env, order, decision) {
       body: JSON.stringify({
         from: 'Vollmers Hofladen <noreply@scholz-friese-webdesign.de>',
         to: [order.email],
-        reply_to: env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com',
+        reply_to: env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de',
         subject,
         html: htmlContent,
       }),
@@ -497,7 +497,7 @@ export default {
           // Neues oder noch nicht gemerktes Gerät -> 2FA-Code per E-Mail anfordern
           const code = Math.floor(100000 + Math.random() * 900000).toString();
           const targetDeviceId = deviceId || ('dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8));
-          const recipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+          const recipient = env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de';
 
           const pending2FA = {
             code,
@@ -599,7 +599,7 @@ export default {
 
           const code = Math.floor(100000 + Math.random() * 900000).toString();
           const targetDeviceId = deviceId || ('dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8));
-          const recipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+          const recipient = env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de';
 
           const pending2FA = {
             code,
@@ -744,7 +744,7 @@ export default {
 
           // E-Mail-Benachrichtigung an den Hofladen (Resend API)
           const resendKey = env.RESEND_API_KEY;
-          const emailRecipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+          const emailRecipient = env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de';
           if (resendKey) {
             try {
               const deliveryDateText = formatThursdayText(newOrder.deliveryDate);
@@ -1080,7 +1080,7 @@ export default {
 
           // E-Mail über Resend senden
           const resendKey = env.RESEND_API_KEY;
-          const emailRecipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+          const emailRecipient = env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de';
           if (!resendKey) {
             return jsonResponse({ success: false, error: 'E-Mail Dienst nicht konfiguriert.' }, 500);
           }

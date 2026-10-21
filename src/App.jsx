@@ -12,6 +12,7 @@ import FreeRangePage from './pages/FreeRangePage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import AdminPage from './pages/AdminPage';
+import ErrorBoundary from './components/ErrorBoundary';
 
 import { ProductProvider } from './context/ProductContext';
 
@@ -69,9 +70,13 @@ export default function App() {
       if (VALID_PAGES.includes(page)) {
         setCurrentPage(page);
       } else {
-        setCurrentPage('home');
+        if (typeof window !== 'undefined' && (window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/'))) {
+          setCurrentPage('admin');
+        } else {
+          setCurrentPage('home');
+        }
       }
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      window.scrollTo(0, 0);
     };
 
     window.addEventListener('hashchange', handleHashChange);
@@ -141,9 +146,11 @@ export default function App() {
             <ContactPage />
           )}
           {currentPage === 'admin' && (
-            <AdminPage
-              onNavigate={navigateTo}
-            />
+            <ErrorBoundary>
+              <AdminPage
+                onNavigate={navigateTo}
+              />
+            </ErrorBoundary>
           )}
         </main>
 

@@ -16,7 +16,7 @@ export async function onRequestPost(context) {
 
   const resendKey = env.RESEND_API_KEY;
   const turnstileSecret = env.TURNSTILE_SECRET_KEY;
-  const emailRecipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+  const emailRecipient = env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de';
 
   try {
     const { name, email, phone, subject, message, turnstileToken } = await request.json();

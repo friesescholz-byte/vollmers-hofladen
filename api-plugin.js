@@ -47,7 +47,7 @@ export function apiPlugin() {
         const resendKey = env.RESEND_API_KEY || '';
         const turnstileSecret = env.TURNSTILE_SECRET_KEY || '';
         const adminPw = env.ADMIN_PASSWORD || '';
-        const emailRecipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+        const emailRecipient = env.EMAIL_RECIPIENT || 'info@vollmers-hofladen.de';
 
         res.setHeader('Content-Type', 'application/json');
 

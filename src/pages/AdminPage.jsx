@@ -111,7 +111,7 @@ export default function AdminPage({ onNavigate }) {
   const [twoFactorError, setTwoFactorError] = useState('');
   const [twoFactorLoading, setTwoFactorLoading] = useState(false);
   const [trustDevice, setTrustDevice] = useState(true);
-  const [maskedEmail, setMaskedEmail] = useState('friese.scholz@gmail.com');
+  const [maskedEmail, setMaskedEmail] = useState('i***@vollmers-hofladen.de');
   const [pendingDeviceId, setPendingDeviceId] = useState('');
 
   // Trusted Devices Management
@@ -141,8 +141,15 @@ export default function AdminPage({ onNavigate }) {
   });
 
   // State: Eier-Donnerstag
-  const [eggOrders, setEggOrders] = useState([]);
+  const [eggOrders, setEggOrders] = useState(() => {
+    try {
+      const local = JSON.parse(localStorage.getItem('vollmers_egg_orders') || '[]');
+      if (Array.isArray(local)) return local.filter(Boolean);
+    } catch (e) {}
+    return [];
+  });
   const [eggLoading, setEggLoading] = useState(false);
+  const [kvError, setKvError] = useState('');
   const [editingEggOrder, setEditingEggOrder] = useState(null);
   const [isCreatingEggOrder, setIsCreatingEggOrder] = useState(false);
   const [eggFilterStatus, setEggFilterStatus] = useState('all'); // 'all' | 'pending' | 'accepted' | 'rejected'
@@ -187,11 +194,12 @@ export default function AdminPage({ onNavigate }) {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
-  // Eier-Donnerstag Liste laden
+  // Eier-Donnerstag Liste aus Cloudflare KV laden
   const fetchEggOrders = async (tokenOverride) => {
     const token = tokenOverride || sessionToken;
-    if (!token) return;
+    if (!token) return [];
     setEggLoading(true);
+    setKvError('');
     try {
       const res = await fetch('/api/admin/eier-donnerstag', {
         headers: { Authorization: `Bearer ${token}` },
@@ -199,23 +207,33 @@ export default function AdminPage({ onNavigate }) {
       if (res.ok) {
         const data = await res.json().catch(() => null);
         if (data?.orders && Array.isArray(data.orders)) {
-          setEggOrders(data.orders);
+          const validOrders = data.orders.filter(Boolean);
+          setEggOrders(validOrders);
           try {
-            localStorage.setItem('vollmers_egg_orders', JSON.stringify(data.orders));
+            localStorage.setItem('vollmers_egg_orders', JSON.stringify(validOrders));
           } catch (e) {}
           setEggLoading(false);
-          return;
+          return validOrders;
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status !== 401) {
+          setKvError(errData?.error || 'Fehler beim Laden der Lieferanfragen.');
         }
       }
     } catch (err) {
       console.warn('Fehler beim Laden der Eier-Donnerstag Liste:', err);
+      setKvError('Verbindungsfehler beim Laden der Anfragen.');
     }
 
     try {
       const local = JSON.parse(localStorage.getItem('vollmers_egg_orders') || '[]');
-      if (Array.isArray(local)) setEggOrders(local);
+      if (Array.isArray(local) && local.length > 0) {
+        setEggOrders(local.filter(Boolean));
+      }
     } catch (e) {}
     setEggLoading(false);
+    return [];
   };
 
   useEffect(() => {
@@ -315,11 +333,13 @@ export default function AdminPage({ onNavigate }) {
           sessionStorage.setItem('vollmer_admin_token', token);
           localStorage.setItem('vollmer_admin_token', token);
         } catch (e) {}
+
         setSessionToken(token);
         setPasswordInput('');
-        showToast('Erfolgreich angemeldet (bekanntes Gerät).');
+        window.scrollTo(0, 0);
+        showToast('Erfolgreich angemeldet.');
 
-        // Daten sofort ohne Reload anfordern
+        // Daten direkt im Hintergrund synchronisieren
         fetchEggOrders(token);
         refreshProducts();
         refreshEvents();
@@ -335,6 +355,7 @@ export default function AdminPage({ onNavigate }) {
       } catch (e) {}
       setSessionToken(token);
       setPasswordInput('');
+      window.scrollTo(0, 0);
       fetchEggOrders(token);
       refreshProducts();
       refreshEvents();
@@ -376,13 +397,15 @@ export default function AdminPage({ onNavigate }) {
           sessionStorage.setItem('vollmer_admin_token', token);
           localStorage.setItem('vollmer_admin_token', token);
         } catch (e) {}
+
         setSessionToken(token);
         setPasswordInput('');
         setTwoFactorCode('');
         setAuthStep('password');
-        showToast(trustDevice ? 'Gerät gemerkt & erfolgreich angemeldet!' : 'Erfolgreich angemeldet!');
+        window.scrollTo(0, 0);
+        showToast(trustDevice ? 'Gerät dauerhaft gemerkt & erfolgreich angemeldet!' : 'Erfolgreich angemeldet!');
 
-        // Sofort Daten laden
+        // Daten direkt im Hintergrund synchronisieren
         fetchEggOrders(token);
         refreshProducts();
         refreshEvents();
@@ -886,13 +909,82 @@ export default function AdminPage({ onNavigate }) {
   };
 
   // Filtered Products
-  const visibleProducts = products.filter(p => {
+  const visibleProducts = (products || []).filter(p => {
+    if (!p) return false;
     const matchesCat = filterCategory === 'all' || p.category === filterCategory;
-    const matchesSearch = !searchQuery ||
-      p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
+    const name = (p.name || '').toLowerCase();
+    const desc = (p.description || '').toLowerCase();
+    const q = (searchQuery || '').toLowerCase();
+    const matchesSearch = !q || name.includes(q) || desc.includes(q);
     return matchesCat && matchesSearch;
   });
+
+  // Unconditional Dashboard Calculations & useMemo Hooks (React Rules of Hooks)
+  const outOfStockCount = (products || []).filter(p => p && p.isOutOfStock).length;
+  const inStockCount = (products || []).length - outOfStockCount;
+  const totalEggCount = (eggOrders || []).filter(Boolean).reduce((sum, o) => sum + (Number(o?.eggCount) || 0), 0);
+
+  const pendingEggOrders = useMemo(() => {
+    return (eggOrders || []).filter(o => o && (!o.status || o.status === 'pending'));
+  }, [eggOrders]);
+
+  const acceptedEggOrders = useMemo(() => {
+    return (eggOrders || []).filter(o => o && o.status === 'accepted');
+  }, [eggOrders]);
+
+  const rejectedEggOrders = useMemo(() => {
+    return (eggOrders || []).filter(o => o && o.status === 'rejected');
+  }, [eggOrders]);
+
+  const acceptedEggCount = useMemo(() => {
+    return acceptedEggOrders.reduce((sum, o) => sum + (Number(o?.eggCount) || 0), 0);
+  }, [acceptedEggOrders]);
+
+  const availableThursdays = useMemo(() => {
+    const dates = Array.from(new Set((eggOrders || []).filter(Boolean).map(o => o?.deliveryDate).filter(Boolean)));
+    return dates.sort();
+  }, [eggOrders]);
+
+  const thursdaysStats = useMemo(() => {
+    const stats = {};
+    (eggOrders || []).filter(Boolean).forEach(o => {
+      const d = o.deliveryDate || 'Ohne Datum';
+      if (!stats[d]) stats[d] = { totalEggs: 0, acceptedEggs: 0, households: 0 };
+      const eggs = Number(o.eggCount) || 0;
+      stats[d].totalEggs += eggs;
+      stats[d].households += 1;
+      if (o.status === 'accepted') stats[d].acceptedEggs += eggs;
+    });
+    return stats;
+  }, [eggOrders]);
+
+  const filteredEggOrders = useMemo(() => {
+    return (eggOrders || []).filter(o => {
+      if (!o) return false;
+      const status = o.status || 'pending';
+      if (eggFilterStatus !== 'all' && status !== eggFilterStatus) return false;
+      if (eggFilterThursday !== 'all' && o.deliveryDate !== eggFilterThursday) return false;
+      if (eggFilterTown !== 'all') {
+        const matchesTown = (o.townId && o.townId === eggFilterTown) ||
+          (o.town && o.town.toLowerCase() === eggFilterTown.toLowerCase()) ||
+          (o.address && o.address.toLowerCase().includes(eggFilterTown.toLowerCase()));
+        if (!matchesTown) return false;
+      }
+      if (eggSearch.trim()) {
+        const q = eggSearch.toLowerCase();
+        const matchesQuery = (o.name && o.name.toLowerCase().includes(q)) ||
+          (o.address && o.address.toLowerCase().includes(q)) ||
+          (o.email && o.email.toLowerCase().includes(q)) ||
+          (o.message && o.message.toLowerCase().includes(q));
+        if (!matchesQuery) return false;
+      }
+      return true;
+    });
+  }, [eggOrders, eggFilterStatus, eggFilterThursday, eggFilterTown, eggSearch]);
+
+  const filteredEggCount = useMemo(() => {
+    return filteredEggOrders.reduce((sum, o) => sum + (Number(o?.eggCount) || 0), 0);
+  }, [filteredEggOrders]);
 
   // =========================================================================
   // VIEW A: LOGIN SCREEN & 2FA (Weymann-Prinzip & Geräte-Erkennung)
@@ -1083,71 +1175,6 @@ export default function AdminPage({ onNavigate }) {
   // =========================================================================
   // VIEW B: DASHBOARD
   // =========================================================================
-  const outOfStockCount = products.filter(p => p.isOutOfStock).length;
-  const inStockCount = products.length - outOfStockCount;
-  const totalEggCount = eggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
-
-  const pendingEggOrders = useMemo(() => {
-    return eggOrders.filter(o => !o.status || o.status === 'pending');
-  }, [eggOrders]);
-
-  const acceptedEggOrders = useMemo(() => {
-    return eggOrders.filter(o => o.status === 'accepted');
-  }, [eggOrders]);
-
-  const rejectedEggOrders = useMemo(() => {
-    return eggOrders.filter(o => o.status === 'rejected');
-  }, [eggOrders]);
-
-  const acceptedEggCount = useMemo(() => {
-    return acceptedEggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
-  }, [acceptedEggOrders]);
-
-  const availableThursdays = useMemo(() => {
-    const dates = Array.from(new Set(eggOrders.map(o => o.deliveryDate).filter(Boolean)));
-    return dates.sort();
-  }, [eggOrders]);
-
-  const thursdaysStats = useMemo(() => {
-    const stats = {};
-    eggOrders.forEach(o => {
-      const d = o.deliveryDate || 'Ohne Datum';
-      if (!stats[d]) stats[d] = { totalEggs: 0, acceptedEggs: 0, households: 0 };
-      const eggs = Number(o.eggCount) || 0;
-      stats[d].totalEggs += eggs;
-      stats[d].households += 1;
-      if (o.status === 'accepted') stats[d].acceptedEggs += eggs;
-    });
-    return stats;
-  }, [eggOrders]);
-
-  const filteredEggOrders = useMemo(() => {
-    return eggOrders.filter(o => {
-      const status = o.status || 'pending';
-      if (eggFilterStatus !== 'all' && status !== eggFilterStatus) return false;
-      if (eggFilterThursday !== 'all' && o.deliveryDate !== eggFilterThursday) return false;
-      if (eggFilterTown !== 'all') {
-        const matchesTown = (o.townId && o.townId === eggFilterTown) ||
-          (o.town && o.town.toLowerCase() === eggFilterTown.toLowerCase()) ||
-          (o.address && o.address.toLowerCase().includes(eggFilterTown.toLowerCase()));
-        if (!matchesTown) return false;
-      }
-      if (eggSearch.trim()) {
-        const q = eggSearch.toLowerCase();
-        const matchesQuery = (o.name && o.name.toLowerCase().includes(q)) ||
-          (o.address && o.address.toLowerCase().includes(q)) ||
-          (o.email && o.email.toLowerCase().includes(q)) ||
-          (o.message && o.message.toLowerCase().includes(q));
-        if (!matchesQuery) return false;
-      }
-      return true;
-    });
-  }, [eggOrders, eggFilterStatus, eggFilterThursday, eggFilterTown, eggSearch]);
-
-  const filteredEggCount = useMemo(() => {
-    return filteredEggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
-  }, [filteredEggOrders]);
-
   return (
     <div className="min-h-screen bg-canvas text-ink py-10 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -1179,11 +1206,14 @@ export default function AdminPage({ onNavigate }) {
 
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
-              onClick={() => {
-                refreshProducts();
-                refreshEvents();
-                fetchEggOrders();
-                showToast('Daten aktualisiert.');
+              onClick={async () => {
+                showToast('Aktualisiere Daten...');
+                await Promise.allSettled([
+                  refreshProducts(),
+                  refreshEvents(),
+                  fetchEggOrders(sessionToken),
+                ]);
+                showToast('Daten erfolgreich aktualisiert.');
               }}
               className="px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-ink-muted hover:text-ink transition-colors flex items-center gap-2"
             >
@@ -1225,7 +1255,7 @@ export default function AdminPage({ onNavigate }) {
               }`}
             >
               <Package className="w-4 h-4" />
-              <span>Sortiment ({products.length})</span>
+              <span>Sortiment ({products?.length || 0})</span>
             </button>
 
             <button
@@ -1237,7 +1267,7 @@ export default function AdminPage({ onNavigate }) {
               }`}
             >
               <EggIcon className="w-4 h-4" />
-              <span>Eier-Donnerstag ({eggOrders.length})</span>
+              <span>Eier-Donnerstag ({eggOrders?.length || 0})</span>
             </button>
 
             <button
@@ -1249,7 +1279,7 @@ export default function AdminPage({ onNavigate }) {
               }`}
             >
               <Calendar className="w-4 h-4" />
-              <span>Termine & Märkte ({events.length})</span>
+              <span>Termine & Märkte ({events?.length || 0})</span>
             </button>
           </div>
 
@@ -1297,7 +1327,7 @@ export default function AdminPage({ onNavigate }) {
                   Gesamtes Sortiment
                 </span>
                 <span className="font-serif text-2xl sm:text-3xl text-ink font-bold block mt-1">
-                  {products.length} Artikel
+                  {products?.length || 0} Artikel
                 </span>
               </div>
 
@@ -1469,22 +1499,23 @@ export default function AdminPage({ onNavigate }) {
             {/* Kopfbereich Tab 2: Titel & Schnellaktionen */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-canvas-card p-4 sm:p-5 rounded-2xl border border-ink-border shadow-subtle">
               <div>
-                <h2 className="font-serif text-2xl text-ink">Eier-Donnerstag Touren & Anfragen</h2>
-                <p className="text-xs text-ink-muted mt-0.5">
-                  Lieferanfragen annehmen, Touren planen und Adressen verwalten. (Live-Sync aktiv)
+                <h2 className="font-serif text-2xl text-ink mb-1">Eier-Donnerstag Touren & Anfragen</h2>
+                <p className="text-xs text-ink-muted">
+                  Lieferanfragen annehmen, Touren planen und Adressen verwalten.
                 </p>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    showToast('Aktualisiere Daten aus Cloudflare KV...');
-                    fetchEggOrders();
+                  onClick={async () => {
+                    showToast('Aktualisiere Anfragen...');
+                    await fetchEggOrders(sessionToken);
+                    showToast('Anfragen erfolgreich aktualisiert.');
                   }}
                   disabled={eggLoading}
                   className="px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink hover:bg-canvas-muted text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
-                  title="Liste neu aus Cloudflare KV laden"
+                  title="Liste aktualisieren"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${eggLoading ? 'animate-spin text-forest' : 'text-forest'}`} />
                   <span>{eggLoading ? 'Wird geladen...' : 'Aktualisieren'}</span>
@@ -1501,6 +1532,34 @@ export default function AdminPage({ onNavigate }) {
               </div>
             </div>
 
+            {/* Error Banner falls Verbindungsprobleme */}
+            {kvError && (
+              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>{kvError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => fetchEggOrders(sessionToken)}
+                  className="px-3 py-1 rounded-lg bg-amber-200 hover:bg-amber-300 text-amber-900 font-semibold text-xs transition-colors shrink-0"
+                >
+                  Erneut versuchen
+                </button>
+              </div>
+            )}
+
+            {/* Dedizierter Loading-Status wenn Daten zum ersten Mal geladen werden */}
+            {eggLoading && eggOrders.length === 0 && (
+              <div className="p-12 rounded-3xl bg-canvas-card border border-ink-border text-center space-y-3 shadow-subtle animate-in fade-in duration-200">
+                <Loader2 className="w-8 h-8 text-forest animate-spin mx-auto" />
+                <h3 className="font-serif text-xl text-ink font-semibold">Anfragen werden geladen...</h3>
+                <p className="text-xs text-ink-muted max-w-md mx-auto">
+                  Lade aktuelle Anfragen für den Eier-Donnerstag...
+                </p>
+              </div>
+            )}
+
             {/* KPI Übersichtskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
@@ -1508,7 +1567,7 @@ export default function AdminPage({ onNavigate }) {
                   Eingetragene Haushalte
                 </span>
                 <span className="font-serif text-2xl sm:text-3xl text-ink font-bold block mt-1">
-                  {eggOrders.length} {eggOrders.length === 1 ? 'Haushalt' : 'Haushalte'}
+                  {eggOrders?.length || 0} {eggOrders?.length === 1 ? 'Haushalt' : 'Haushalte'}
                 </span>
                 <span className="text-[11px] text-ink-faint block mt-0.5">
                   Über alle Ortschaften hinweg
@@ -1673,11 +1732,12 @@ export default function AdminPage({ onNavigate }) {
                     >
                       <option value="all">Alle Ortschaften ({eggOrders.length})</option>
                       {DELIVERY_TOWNS.map((t) => {
-                        const count = eggOrders.filter(
+                        const count = (eggOrders || []).filter(
                           (o) =>
-                            o.townId === t.id ||
-                            (o.town && o.town.toLowerCase() === t.name.toLowerCase()) ||
-                            (o.address && o.address.toLowerCase().includes(t.name.toLowerCase()))
+                            o &&
+                            (o.townId === t.id ||
+                              (o.town && o.town.toLowerCase() === t.name.toLowerCase()) ||
+                              (o.address && o.address.toLowerCase().includes(t.name.toLowerCase())))
                         ).length;
                         return (
                           <option key={t.id} value={t.id}>
@@ -2720,7 +2780,7 @@ export default function AdminPage({ onNavigate }) {
 
               <div className="pt-4 border-t border-ink-border flex items-center justify-between">
                 <span className="text-[11px] text-ink-faint">
-                  Sicherheitscode per Resend an friese.scholz@gmail.com
+                  Sicherheitscode per Resend an info@vollmers-hofladen.de
                 </span>
                 <button
                   type="button"
