@@ -400,6 +400,72 @@ export default function ContactPage() {
 
         </div>
 
+        {/* Verkaufsstelle & Google Maps Karte */}
+        <div className="mt-10 sm:mt-14 rounded-2xl sm:rounded-3xl bg-canvas-card border border-ink-border shadow-elevated overflow-hidden">
+          {/* Karten-Kopfbereich */}
+          <div className="p-5 sm:p-8 border-b border-ink-border flex flex-col md:flex-row md:items-center justify-between gap-4 bg-canvas-card">
+            <div className="flex items-start sm:items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl bg-forest-tint border border-forest-border flex items-center justify-center text-forest shrink-0">
+                <MapPin className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-xs font-semibold uppercase tracking-widest text-forest block">
+                  Unsere Verkaufsstelle in Machtsum
+                </span>
+                <h2 className="font-serif text-2xl sm:text-3xl text-ink mt-0.5">
+                  Vollmer’s Hofladen • Lindenallee 24
+                </h2>
+                <p className="text-xs sm:text-sm text-ink-muted mt-1">
+                  31177 Harsum (OT Machtsum) — Direkt an der Hofstelle mit kostenlosen Parkplätzen
+                </p>
+              </div>
+            </div>
+
+            <a
+              href="https://www.google.com/maps/dir/?api=1&destination=Vollmers+Hofladen+Lindenallee+24+31177+Harsum"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="px-5 py-3 rounded-xl bg-forest text-white hover:bg-forest-hover text-xs sm:text-sm font-semibold transition-colors shadow-subtle flex items-center justify-center gap-2 shrink-0"
+            >
+              <Navigation className="w-4 h-4" />
+              <span>Route zur Verkaufsstelle starten</span>
+              <ExternalLink className="w-3.5 h-3.5 opacity-80" />
+            </a>
+          </div>
+
+          {/* Interaktive Google Map mit Verkaufsstellen-Overlay */}
+          <div className="relative w-full h-[380px] sm:h-[460px] bg-[#E8E4D9]">
+            <iframe
+              title="Verkaufsstelle Vollmers Hofladen Lindenallee 24, 31177 Harsum-Machtsum"
+              src="https://maps.google.com/maps?q=Vollmers+Hofladen,+Lindenallee+24,+31177+Harsum&hl=de&z=15&output=embed"
+              className="w-full h-full border-0"
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
+
+            {/* Schwebende Verkaufsstellen-Visitenkarte unten links */}
+            <div className="hidden sm:flex absolute bottom-5 left-5 z-10 max-w-sm p-4 rounded-2xl bg-canvas-card/95 backdrop-blur-md border border-ink-border shadow-elevated items-center gap-3.5">
+              <img
+                src={MEDIA.favicon}
+                alt="Vollmer's Hofladen"
+                className="w-11 h-11 rounded-full bg-white object-contain border border-ink-border p-1 shrink-0"
+              />
+              <div className="min-w-0">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-forest block">
+                  24/7 SB-Verkaufsstelle
+                </span>
+                <strong className="text-sm font-serif text-ink block truncate">
+                  Vollmer’s Hofladen
+                </strong>
+                <span className="text-xs text-ink-muted block">
+                  Lindenallee 24, 31177 Harsum (Machtsum)
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   );

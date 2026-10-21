@@ -15,9 +15,9 @@ export default function Footer({ onNavigate, onOpenLegal }) {
           <div className="lg:col-span-2 space-y-4">
             <div className="flex items-center gap-3">
               <img
-                src={MEDIA.logo}
-                alt="Vollmers Hofladen Logo"
-                className="w-12 h-12 rounded-full bg-white object-contain border border-white/20 p-0.5"
+                src={MEDIA.favicon}
+                alt="Vollmers Hofladen Hahn-Icon"
+                className="w-12 h-12 rounded-full bg-white object-contain border border-white/20 p-1.5"
               />
               <div>
                 <span className="font-serif text-2xl font-bold tracking-tight block leading-tight">
@@ -94,7 +94,23 @@ export default function Footer({ onNavigate, onOpenLegal }) {
                   onClick={() => onNavigate('produkte')}
                   className="hover:text-white transition-colors"
                 >
-                  Produkte & Hofladen
+                  Sortiment & Hofladen
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('eier-donnerstag')}
+                  className="hover:text-white transition-colors"
+                >
+                  Eier-Donnerstag
+                </button>
+              </li>
+              <li>
+                <button
+                  onClick={() => onNavigate('termine')}
+                  className="hover:text-white transition-colors"
+                >
+                  Termine & Märkte
                 </button>
               </li>
               <li>
@@ -205,14 +221,6 @@ export default function Footer({ onNavigate, onOpenLegal }) {
             >
               by Scholz & Friese Webdesign
             </a>
-            <span className="text-white/20">•</span>
-            <button
-              onClick={() => onNavigate('admin')}
-              className="hover:text-white transition-colors text-white/30 hover:underline"
-              title="Interner Admin-Bereich zur Sortiments- & Bildpflege"
-            >
-              Hofladen-Admin
-            </button>
           </div>
         </div>
 

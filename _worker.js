@@ -1,4 +1,5 @@
 import { PRODUCTS as DEFAULT_PRODUCTS } from './src/data/products.js';
+import { DEFAULT_EVENTS } from './src/data/events.js';
 
 // Einheitliche CORS-Header
 const corsHeaders = {
@@ -16,6 +17,70 @@ function jsonResponse(data, status = 200) {
       ...corsHeaders,
     },
   });
+}
+
+// Generischer KV-Reader (Direktes Binding + REST Fallback)
+async function readKV(env, key) {
+  if (env.VOLLMERS_KV && typeof env.VOLLMERS_KV.get === 'function') {
+    try {
+      const data = await env.VOLLMERS_KV.get(key, 'json');
+      if (data !== null && data !== undefined) return { data, source: 'kv' };
+    } catch (err) {
+      console.warn(`KV Binding get error (${key}):`, err);
+    }
+  }
+
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const kvNsId = env.KV_NAMESPACE_ID;
+
+  if (accountId && apiToken && kvNsId) {
+    try {
+      const res = await fetch(
+        `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/${key}`,
+        { headers: { Authorization: `Bearer ${apiToken}` } }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        return { data, source: 'kv-api' };
+      }
+    } catch (e) {
+      console.warn(`REST API KV fetch error (${key}):`, e);
+    }
+  }
+
+  return { data: null, source: 'fallback' };
+}
+
+// Generischer KV-Writer (Direktes Binding + REST Fallback)
+async function writeKV(env, key, value) {
+  if (env.VOLLMERS_KV && typeof env.VOLLMERS_KV.put === 'function') {
+    await env.VOLLMERS_KV.put(key, JSON.stringify(value));
+    return { ok: true };
+  }
+
+  const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+  const apiToken = env.CLOUDFLARE_API_TOKEN;
+  const kvNsId = env.KV_NAMESPACE_ID;
+
+  if (accountId && apiToken && kvNsId) {
+    const res = await fetch(
+      `https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/${key}`,
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${apiToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(value),
+      }
+    );
+    if (res.ok) return { ok: true };
+    const errText = await res.text();
+    return { ok: false, error: 'KV REST Fehler: ' + errText };
+  }
+
+  return { ok: false, error: 'Keine KV-Anbindung konfiguriert' };
 }
 
 export default {
@@ -37,40 +102,10 @@ export default {
         // 1. GET /api/products -> Liest Produkte aus Cloudflare KV
         // -------------------------------------------------------------
         if (url.pathname === '/api/products' && request.method === 'GET') {
-          // A) Direkte KV Binding
-          if (env.VOLLMERS_KV && typeof env.VOLLMERS_KV.get === 'function') {
-            try {
-              const kvData = await env.VOLLMERS_KV.get('products', 'json');
-              if (kvData && Array.isArray(kvData) && kvData.length > 0) {
-                return jsonResponse({ success: true, source: 'kv', products: kvData });
-              }
-            } catch (err) {
-              console.warn('KV Binding get error:', err);
-            }
+          const { data, source } = await readKV(env, 'products');
+          if (Array.isArray(data) && data.length > 0) {
+            return jsonResponse({ success: true, source, products: data });
           }
-
-          // B) REST API Fallback
-          const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-          const apiToken = env.CLOUDFLARE_API_TOKEN;
-          const kvNsId = env.KV_NAMESPACE_ID;
-
-          if (accountId && apiToken && kvNsId) {
-            try {
-              const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/products`, {
-                headers: { 'Authorization': `Bearer ${apiToken}` }
-              });
-              if (res.ok) {
-                const kvData = await res.json();
-                if (kvData && Array.isArray(kvData) && kvData.length > 0) {
-                  return jsonResponse({ success: true, source: 'kv-api', products: kvData });
-                }
-              }
-            } catch (e) {
-              console.warn('REST API KV fetch error:', e);
-            }
-          }
-
-          // C) Fallback auf Standardprodukte
           return jsonResponse({ success: true, source: 'fallback', products: DEFAULT_PRODUCTS });
         }
 
@@ -104,39 +139,113 @@ export default {
             return jsonResponse({ success: false, error: 'Ungültiges Produkt-Array' }, 400);
           }
 
-          // A) Direkte KV Binding
-          if (env.VOLLMERS_KV && typeof env.VOLLMERS_KV.put === 'function') {
-            await env.VOLLMERS_KV.put('products', JSON.stringify(products));
-            return jsonResponse({ success: true, message: 'Produkte erfolgreich in Cloudflare KV gespeichert!' });
+          const result = await writeKV(env, 'products', products);
+          if (result.ok) {
+            return jsonResponse({ success: true, message: 'Produkte erfolgreich gespeichert!' });
           }
-
-          // B) REST API Fallback
-          const accountId = env.CLOUDFLARE_ACCOUNT_ID;
-          const apiToken = env.CLOUDFLARE_API_TOKEN;
-          const kvNsId = env.KV_NAMESPACE_ID;
-
-          if (accountId && apiToken && kvNsId) {
-            const res = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/products`, {
-              method: 'PUT',
-              headers: {
-                'Authorization': `Bearer ${apiToken}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(products)
-            });
-
-            if (res.ok) {
-              return jsonResponse({ success: true, message: 'Produkte via KV REST API gespeichert!' });
-            }
-            const errText = await res.text();
-            return jsonResponse({ success: false, error: 'KV REST Fehler: ' + errText }, 500);
-          }
-
-          return jsonResponse({ success: false, error: 'Keine KV-Anbindung konfiguriert' }, 500);
+          return jsonResponse({ success: false, error: result.error }, 500);
         }
 
         // -------------------------------------------------------------
-        // 4. POST /api/admin/upload -> Bild hochladen, nach R2 speichern
+        // 4. GET /api/events & POST /api/admin/events -> Termine & Märkte
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/events' && request.method === 'GET') {
+          const { data, source } = await readKV(env, 'events');
+          if (Array.isArray(data)) {
+            return jsonResponse({ success: true, source, events: data });
+          }
+          return jsonResponse({ success: true, source: 'fallback', events: DEFAULT_EVENTS });
+        }
+
+        if (url.pathname === '/api/admin/events' && request.method === 'POST') {
+          const authHeader = request.headers.get('authorization') || '';
+          if (!authHeader.includes('vollmer_session_')) {
+            return jsonResponse({ success: false, error: 'Nicht autorisiert' }, 401);
+          }
+
+          const body = await request.json().catch(() => ({}));
+          if (!Array.isArray(body.events)) {
+            return jsonResponse({ success: false, error: 'Ungültiges Termine-Array' }, 400);
+          }
+
+          const result = await writeKV(env, 'events', body.events);
+          if (result.ok) {
+            return jsonResponse({ success: true, events: body.events, message: 'Termine gespeichert!' });
+          }
+          return jsonResponse({ success: false, error: result.error }, 500);
+        }
+
+        // -------------------------------------------------------------
+        // 5. Eier-Donnerstag Endpunkte (Öffentliche Anmeldung & Admin)
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/eier-donnerstag' && request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const { name, email, address, eggCount, message } = body;
+
+          if (!name || !email || !address || !eggCount) {
+            return jsonResponse({ success: false, error: 'Bitte fülle Name, E-Mail, Adresse in Machtsum und Eiermenge aus.' }, 400);
+          }
+
+          const { data: existing } = await readKV(env, 'egg_orders');
+          const currentOrders = Array.isArray(existing) ? existing : [];
+
+          const newOrder = {
+            id: 'egg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            name: String(name).trim(),
+            email: String(email).trim(),
+            address: String(address).trim(),
+            eggCount: Number(eggCount) || String(eggCount).trim(),
+            message: message ? String(message).trim() : '',
+            createdAt: new Date().toISOString(),
+          };
+
+          const updatedOrders = [newOrder, ...currentOrders];
+          const writeRes = await writeKV(env, 'egg_orders', updatedOrders);
+
+          if (!writeRes.ok) {
+            return jsonResponse({ success: false, error: writeRes.error || 'Konnte Anmeldung nicht speichern.' }, 500);
+          }
+
+          return jsonResponse({
+            success: true,
+            order: newOrder,
+            message: 'Anmeldung für den Eier-Donnerstag erfolgreich eingetragen!',
+          });
+        }
+
+        if (url.pathname === '/api/admin/eier-donnerstag' && request.method === 'GET') {
+          const authHeader = request.headers.get('authorization') || '';
+          if (!authHeader.includes('vollmer_session_')) {
+            return jsonResponse({ success: false, error: 'Nicht autorisiert' }, 401);
+          }
+
+          const { data } = await readKV(env, 'egg_orders');
+          return jsonResponse({
+            success: true,
+            orders: Array.isArray(data) ? data : [],
+          });
+        }
+
+        if (url.pathname === '/api/admin/eier-donnerstag' && request.method === 'POST') {
+          const authHeader = request.headers.get('authorization') || '';
+          if (!authHeader.includes('vollmer_session_')) {
+            return jsonResponse({ success: false, error: 'Nicht autorisiert' }, 401);
+          }
+
+          const body = await request.json().catch(() => ({}));
+          if (!Array.isArray(body.orders)) {
+            return jsonResponse({ success: false, error: 'Ungültiges Array' }, 400);
+          }
+
+          const result = await writeKV(env, 'egg_orders', body.orders);
+          if (result.ok) {
+            return jsonResponse({ success: true, orders: body.orders, message: 'Eier-Donnerstag Liste aktualisiert!' });
+          }
+          return jsonResponse({ success: false, error: result.error }, 500);
+        }
+
+        // -------------------------------------------------------------
+        // 6. POST /api/admin/upload -> Bild hochladen, nach R2 speichern
         // -------------------------------------------------------------
         if (url.pathname === '/api/admin/upload' && request.method === 'POST') {
           const authHeader = request.headers.get('authorization') || '';
@@ -150,7 +259,7 @@ export default {
             return jsonResponse({ success: false, error: 'Keine Bilddaten empfangen' }, 400);
           }
 
-          const cleanName = (filename || 'produkt_' + Date.now())
+          const cleanName = (filename || 'bild_' + Date.now())
             .replace(/\.[^/.]+$/, "")
             .replace(/[^a-zA-Z0-9_-]/g, "_");
           const r2Key = `Vollmers-Hofladen/Produkte/${cleanName}_${Date.now()}.webp`;
@@ -199,7 +308,7 @@ export default {
         }
 
         // -------------------------------------------------------------
-        // 5. POST /api/send-email -> Kontaktformular mit Turnstile & Resend
+        // 7. POST /api/send-email -> Kontaktformular mit Turnstile & Resend
         // -------------------------------------------------------------
         if (url.pathname === '/api/send-email' && request.method === 'POST') {
           const body = await request.json().catch(() => ({}));

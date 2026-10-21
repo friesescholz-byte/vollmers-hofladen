@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
-import { ArrowRight, Clock, ShieldCheck, Heart, MapPin, Sparkles, ShoppingBag, ExternalLink, ChevronRight, Star } from 'lucide-react';
+import { ArrowRight, Clock, ShieldCheck, Heart, MapPin, Sparkles, ShoppingBag, ExternalLink, ChevronRight, Star, Egg } from 'lucide-react';
 import { MEDIA } from '../data/media';
 import BeholdInstagramFeed from '../components/BeholdInstagramFeed';
 import HofladenHeroButton from '../components/HofladenHeroButton';
@@ -90,45 +90,32 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
             </p>
 
             {/* CTAs */}
-            <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-2.5 sm:gap-6">
+            <div className="mt-8 sm:mt-10 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5">
               <HofladenHeroButton
                 onClick={() => onNavigate('produkte')}
                 text="Sortiment entdecken"
                 subtext="24/7 Hofladen"
               />
 
-              {/* Desktop: Elegante Button-Kachel neben dem Hero-Button */}
-              <a
-                href="https://www.google.com/maps/dir/?api=1&destination=Lindenallee+24+31177+Harsum"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="hidden sm:flex items-center gap-3 px-6 py-3.5 h-[68px] rounded-2xl bg-canvas-card border border-ink-border text-ink font-semibold text-sm hover:bg-canvas-muted hover:border-forest/40 transition-all shadow-subtle hover:shadow-elevated group"
+              {/* Desktop & Mobil: Eier-Donnerstag CTA-Kachel */}
+              <button
+                type="button"
+                onClick={() => onNavigate('eier-donnerstag')}
+                className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3.5 px-5 sm:px-6 py-3.5 h-[64px] sm:h-[68px] rounded-2xl bg-canvas-card border border-ink-border text-ink font-semibold text-sm hover:bg-canvas-muted hover:border-forest/50 transition-all shadow-subtle hover:shadow-elevated group text-left"
               >
-                <div className="w-8 h-8 rounded-full bg-forest-tint flex items-center justify-center text-forest group-hover:scale-110 transition-transform shrink-0">
-                  <MapPin className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-full bg-forest-tint border border-forest-border flex items-center justify-center text-forest group-hover:scale-110 transition-transform shrink-0">
+                  <Egg className="w-4 h-4 stroke-[1.75]" />
                 </div>
-                <div className="flex flex-col text-left">
+                <div className="flex flex-col flex-1">
                   <div className="flex items-center gap-1.5">
-                    <span>Route in Google Maps</span>
-                    <ExternalLink className="w-3.5 h-3.5 text-ink-muted group-hover:text-forest transition-colors" />
+                    <span>Machtsumer Eier-Donnerstag</span>
+                    <ArrowRight className="w-3.5 h-3.5 text-forest group-hover:translate-x-0.5 transition-transform" />
                   </div>
-                  <span className="text-[11px] font-normal text-ink-muted">Lindenallee 24, Machtsum (24/7)</span>
+                  <span className="text-[11px] font-normal text-ink-muted">
+                    Jetzt anmelden • Lieferung an die Haustür
+                  </span>
                 </div>
-              </a>
-
-              {/* Mobil: Dezent, klein & unscheinbar direkt unter dem Hero-Button */}
-              <a
-                href="https://www.google.com/maps/dir/?api=1&destination=Lindenallee+24+31177+Harsum"
-                target="_blank"
-                rel="noreferrer noopener"
-                className="sm:hidden inline-flex items-center gap-1.5 text-xs text-ink-muted hover:text-forest transition-colors pl-1 pt-0.5 group"
-              >
-                <MapPin className="w-3.5 h-3.5 text-forest shrink-0" />
-                <span className="underline underline-offset-4 decoration-ink-border group-hover:decoration-forest">
-                  Route in Google Maps planen
-                </span>
-                <ExternalLink className="w-3 h-3 text-ink-faint group-hover:text-forest transition-colors" />
-              </a>
+              </button>
             </div>
           </div>
 
@@ -387,7 +374,7 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
                   </p>
                 </div>
                 <div className="pt-4 mt-4 border-t border-ink-border flex items-center justify-between">
-                  <span className="text-sm font-semibold text-forest">ab 3,70 €</span>
+                  <span className="text-sm font-semibold text-forest">10er Pack / 1 kg Box</span>
                   <span className="text-xs text-ink-faint">Im SB-Laden</span>
                 </div>
               </div>
@@ -418,7 +405,7 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
                   </p>
                 </div>
                 <div className="pt-4 mt-4 border-t border-ink-border flex items-center justify-between">
-                  <span className="text-sm font-semibold text-forest">3,80 € / 500g</span>
+                  <span className="text-sm font-semibold text-forest">500 g Beutel</span>
                   <span className="text-xs text-ink-faint">Im SB-Laden</span>
                 </div>
               </div>
@@ -449,7 +436,7 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
                   </p>
                 </div>
                 <div className="pt-4 mt-4 border-t border-ink-border flex items-center justify-between">
-                  <span className="text-sm font-semibold text-forest">ab 4,50 €</span>
+                  <span className="text-sm font-semibold text-forest">Wurst & Frischfleisch</span>
                   <span className="text-xs text-ink-faint">Landschlachter Sehnde</span>
                 </div>
               </div>

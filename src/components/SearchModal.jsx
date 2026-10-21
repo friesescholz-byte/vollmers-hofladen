@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, X, ArrowRight, Package, Compass, MapPin } from 'lucide-react';
-import { PRODUCTS } from '../data/products';
+import { useProducts } from '../context/ProductContext';
 
 export default function SearchModal({ isOpen, onClose, onNavigate, onSelectProduct }) {
+  const { products } = useProducts();
   const [query, setQuery] = useState('');
   const inputRef = useRef(null);
 
@@ -24,15 +25,17 @@ export default function SearchModal({ isOpen, onClose, onNavigate, onSelectProdu
   const normalized = query.trim().toLowerCase();
 
   const matchingProducts = normalized
-    ? PRODUCTS.filter(p =>
+    ? products.filter(p =>
         p.name.toLowerCase().includes(normalized) ||
-        p.description.toLowerCase().includes(normalized) ||
-        p.badge.toLowerCase().includes(normalized)
+        (p.description && p.description.toLowerCase().includes(normalized)) ||
+        (p.badge && p.badge.toLowerCase().includes(normalized))
       )
     : [];
 
   const quickPages = [
-    { title: 'Produkte & Hofladen', page: 'produkte', desc: 'Eier, Nudeln, Duroc, Honig und mehr' },
+    { title: 'Sortiment & Hofladen', page: 'produkte', desc: 'Eier, Nudeln, Duroc, Honig und mehr' },
+    { title: 'Machtsumer Eier-Donnerstag', page: 'eier-donnerstag', desc: 'Haustür-Lieferung donnerstags in Machtsum' },
+    { title: 'Termine & Märkte', page: 'termine', desc: 'Weihnachtsmarkt am Sültenpaul & Marktstände' },
     { title: 'Freilandhaltung', page: 'freilandhaltung', desc: 'Mobilstall für Hühner & Duroc-Weide' },
     { title: 'Über uns', page: 'ueber-uns', desc: 'Familie Vollmer, Chronologie & Windmühle' },
     { title: 'Kontakt & 24/7 Hofladen', page: 'kontakt', desc: 'Lindenallee 24, Machtsum • Anfahrt' },
@@ -109,9 +112,11 @@ export default function SearchModal({ isOpen, onClose, onNavigate, onSelectProdu
                         <span className="text-sm font-semibold text-ink group-hover:text-forest transition-colors truncate">
                           {product.name}
                         </span>
-                        <span className="text-xs font-medium text-forest ml-2 shrink-0">
-                          {product.price}
-                        </span>
+                        {product.unit && (
+                          <span className="text-xs font-medium text-forest ml-2 shrink-0">
+                            {product.unit}
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-ink-muted truncate mt-0.5">
                         {product.description}

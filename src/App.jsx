@@ -6,12 +6,24 @@ import LegalModal from './components/LegalModal';
 
 import HomePage from './pages/HomePage';
 import ProductsPage from './pages/ProductsPage';
+import EggThursdayPage from './pages/EggThursdayPage';
+import EventsPage from './pages/EventsPage';
 import FreeRangePage from './pages/FreeRangePage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import AdminPage from './pages/AdminPage';
 
 import { ProductProvider } from './context/ProductContext';
+
+const VALID_PAGES = [
+  'produkte',
+  'eier-donnerstag',
+  'termine',
+  'freilandhaltung',
+  'ueber-uns',
+  'kontakt',
+  'admin',
+];
 
 export default function App() {
   // Sync state with URL hash & path
@@ -20,7 +32,7 @@ export default function App() {
       return 'admin';
     }
     const hash = window.location.hash.replace('#', '').toLowerCase();
-    if (['produkte', 'freilandhaltung', 'ueber-uns', 'kontakt', 'admin'].includes(hash)) {
+    if (VALID_PAGES.includes(hash)) {
       return hash;
     }
     return 'home';
@@ -47,7 +59,7 @@ export default function App() {
         setLegalModalType(hash);
         return;
       }
-      if (['produkte', 'freilandhaltung', 'ueber-uns', 'kontakt', 'admin'].includes(hash)) {
+      if (VALID_PAGES.includes(hash)) {
         setCurrentPage(hash);
       } else {
         setCurrentPage('home');
@@ -96,6 +108,16 @@ export default function App() {
           {currentPage === 'produkte' && (
             <ProductsPage
               selectedProductFromSearch={selectedProduct}
+            />
+          )}
+          {currentPage === 'eier-donnerstag' && (
+            <EggThursdayPage
+              onNavigate={navigateTo}
+            />
+          )}
+          {currentPage === 'termine' && (
+            <EventsPage
+              onNavigate={navigateTo}
             />
           )}
           {currentPage === 'freilandhaltung' && (

@@ -143,6 +143,111 @@ export function apiPlugin() {
           }
 
           // -------------------------------------------------------------
+          // 3b. GET /api/events & POST /api/admin/events
+          // -------------------------------------------------------------
+          if (pathname === '/api/events' && req.method === 'GET') {
+            const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/events`, {
+              headers: { 'Authorization': `Bearer ${apiToken}` }
+            });
+            if (kvRes.ok) {
+              const data = await kvRes.json();
+              res.statusCode = 200;
+              return res.end(JSON.stringify({ success: true, source: 'kv', events: data }));
+            }
+            const eventsMod = await import('./src/data/events.js');
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, source: 'fallback', events: eventsMod.DEFAULT_EVENTS }));
+          }
+
+          if (pathname === '/api/admin/events' && req.method === 'POST') {
+            const authHeader = req.headers['authorization'];
+            if (!authHeader || !authHeader.includes('vollmer_session_')) {
+              res.statusCode = 401;
+              return res.end(JSON.stringify({ success: false, error: 'Nicht autorisiert' }));
+            }
+            const { events } = await parseJsonBody();
+            const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/events`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(events)
+            });
+            res.statusCode = kvRes.ok ? 200 : 500;
+            return res.end(JSON.stringify({ success: kvRes.ok, events }));
+          }
+
+          // -------------------------------------------------------------
+          // 3c. Eier-Donnerstag Endpunkte
+          // -------------------------------------------------------------
+          if (pathname === '/api/eier-donnerstag' && req.method === 'POST') {
+            const { name, email, address, eggCount, message } = await parseJsonBody();
+            if (!name || !email || !address || !eggCount) {
+              res.statusCode = 400;
+              return res.end(JSON.stringify({ success: false, error: 'Bitte fülle alle Pflichtfelder aus.' }));
+            }
+            let currentOrders = [];
+            try {
+              const kvGet = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvGet.ok) currentOrders = await kvGet.json();
+            } catch (e) {}
+            if (!Array.isArray(currentOrders)) currentOrders = [];
+
+            const newOrder = {
+              id: 'egg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              name: String(name).trim(),
+              email: String(email).trim(),
+              address: String(address).trim(),
+              eggCount: Number(eggCount) || String(eggCount).trim(),
+              message: message ? String(message).trim() : '',
+              createdAt: new Date().toISOString(),
+            };
+            const updatedOrders = [newOrder, ...currentOrders];
+
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(updatedOrders)
+            });
+
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, order: newOrder }));
+          }
+
+          if (pathname === '/api/admin/eier-donnerstag' && req.method === 'GET') {
+            const authHeader = req.headers['authorization'];
+            if (!authHeader || !authHeader.includes('vollmer_session_')) {
+              res.statusCode = 401;
+              return res.end(JSON.stringify({ success: false, error: 'Nicht autorisiert' }));
+            }
+            let orders = [];
+            try {
+              const kvGet = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvGet.ok) orders = await kvGet.json();
+            } catch (e) {}
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, orders: Array.isArray(orders) ? orders : [] }));
+          }
+
+          if (pathname === '/api/admin/eier-donnerstag' && req.method === 'POST') {
+            const authHeader = req.headers['authorization'];
+            if (!authHeader || !authHeader.includes('vollmer_session_')) {
+              res.statusCode = 401;
+              return res.end(JSON.stringify({ success: false, error: 'Nicht autorisiert' }));
+            }
+            const { orders } = await parseJsonBody();
+            const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(orders || [])
+            });
+            res.statusCode = kvRes.ok ? 200 : 500;
+            return res.end(JSON.stringify({ success: kvRes.ok, orders }));
+          }
+
+          // -------------------------------------------------------------
           // 4. POST /api/admin/upload -> Bild hochladen, WebP, R2 Upload
           // -------------------------------------------------------------
           if (pathname === '/api/admin/upload' && req.method === 'POST') {

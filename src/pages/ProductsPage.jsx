@@ -95,17 +95,12 @@ export default function ProductsPage({ selectedProductFromSearch }) {
                   </p>
                 </div>
 
-                <div className="pt-4 sm:pt-5 mt-4 sm:mt-5 border-t border-ink-border flex items-center justify-between">
-                  <div>
-                    <span className="text-base font-bold text-forest block">
-                      {product.price}
-                    </span>
-                    <span className="text-[11px] text-ink-faint block">
-                      {product.unit}
-                    </span>
-                  </div>
+                <div className="pt-4 sm:pt-5 mt-4 sm:mt-5 border-t border-ink-border flex items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-forest truncate">
+                    {product.unit || product.availability}
+                  </span>
 
-                  <span className="text-xs font-medium text-ink-muted group-hover:text-forest flex items-center gap-1 transition-colors">
+                  <span className="text-xs font-medium text-ink-muted group-hover:text-forest flex items-center gap-1 transition-colors shrink-0">
                     <span>Details</span>
                     <Info className="w-3.5 h-3.5" />
                   </span>
@@ -206,14 +201,11 @@ export default function ProductsPage({ selectedProductFromSearch }) {
                   <h3 className="font-serif text-3xl text-ink mt-1">
                     {activeProductModal.name}
                   </h3>
-                </div>
-                <div className="text-right">
-                  <span className="text-xl font-bold text-forest block">
-                    {activeProductModal.price}
-                  </span>
-                  <span className="text-xs text-ink-faint">
-                    {activeProductModal.unit}
-                  </span>
+                  {activeProductModal.unit && (
+                    <span className="text-xs font-medium text-ink-muted mt-1 block">
+                      {activeProductModal.unit}
+                    </span>
+                  )}
                 </div>
               </div>
 

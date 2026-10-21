@@ -1,11 +1,12 @@
-import React, { useState } from 'react';
-import { 
-  ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, CheckCircle2, 
-  XCircle, Upload, AlertCircle, ArrowLeft, Loader2, Sparkles, 
-  Search, Eye, ExternalLink, Image as ImageIcon, Save, RefreshCw
+import React, { useState, useEffect } from 'react';
+import {
+  ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, CheckCircle2,
+  XCircle, Upload, AlertCircle, ArrowLeft, Loader2,
+  Search, Image as ImageIcon, Save, RefreshCw, Egg, Calendar, MapPin, Clock, Mail, MessageSquare, Package
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { CATEGORIES } from '../data/products';
+import { PLACEHOLDER_EVENT_IMAGE } from '../data/events';
 
 // SHA-256 Hash für das Weymann-Architektur-Sicherheitsprinzip (Passwort: Vollmer2026!Admin)
 const ADMIN_HASH = "c2f10cc1feec3662f28e52e0d7558b49bbb8403f4e86e81b58bdc3a99d77be70";
@@ -18,28 +19,36 @@ async function sha256(message) {
 }
 
 export default function AdminPage({ onNavigate }) {
-  const { products, loading, source, saveProductsToKV, refreshProducts } = useProducts();
+  const {
+    products,
+    events,
+    saveProductsToKV,
+    saveEventsToKV,
+    refreshProducts,
+    refreshEvents,
+  } = useProducts();
 
   const [sessionToken, setSessionToken] = useState(() => {
     return sessionStorage.getItem('vollmer_admin_token') || null;
   });
 
+  const [activeTab, setActiveTab] = useState('sortiment'); // 'sortiment' | 'eier-donnerstag' | 'termine'
+
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Filter & Search
+  // Filter & Search (Sortiment)
   const [searchQuery, setSearchQuery] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
 
-  // Modal State (Edit / Create)
+  // Modal State: Produkte
   const [editingProduct, setEditingProduct] = useState(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [modalForm, setModalForm] = useState({
     id: '',
     name: '',
     category: 'eier-nudeln',
-    price: '',
     unit: '',
     badge: '',
     description: '',
@@ -48,6 +57,34 @@ export default function AdminPage({ onNavigate }) {
     image: '',
     isOutOfStock: false,
     preorderUrl: ''
+  });
+
+  // State: Eier-Donnerstag
+  const [eggOrders, setEggOrders] = useState([]);
+  const [eggLoading, setEggLoading] = useState(false);
+  const [editingEggOrder, setEditingEggOrder] = useState(null);
+  const [isCreatingEggOrder, setIsCreatingEggOrder] = useState(false);
+  const [eggForm, setEggForm] = useState({
+    id: '',
+    name: '',
+    address: '',
+    email: '',
+    eggCount: 10,
+    message: '',
+  });
+
+  // State: Termine & Märkte
+  const [editingEvent, setEditingEvent] = useState(null);
+  const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+  const [eventForm, setEventForm] = useState({
+    id: '',
+    title: '',
+    date: '',
+    time: '',
+    location: '',
+    badge: 'Unser Marktstand vor Ort',
+    description: '',
+    image: '',
   });
 
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -59,6 +96,64 @@ export default function AdminPage({ onNavigate }) {
     setTimeout(() => setToastMessage(''), 3500);
   };
 
+  // Eier-Donnerstag Liste laden
+  const fetchEggOrders = async (tokenOverride) => {
+    const token = tokenOverride || sessionToken;
+    if (!token) return;
+    setEggLoading(true);
+    try {
+      const res = await fetch('/api/admin/eier-donnerstag', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data?.orders && Array.isArray(data.orders)) {
+          setEggOrders(data.orders);
+          try {
+            localStorage.setItem('vollmers_egg_orders', JSON.stringify(data.orders));
+          } catch (e) {}
+          setEggLoading(false);
+          return;
+        }
+      }
+    } catch (err) {
+      console.warn('Fehler beim Laden der Eier-Donnerstag Liste:', err);
+    }
+
+    try {
+      const local = JSON.parse(localStorage.getItem('vollmers_egg_orders') || '[]');
+      if (Array.isArray(local)) setEggOrders(local);
+    } catch (e) {}
+    setEggLoading(false);
+  };
+
+  useEffect(() => {
+    if (sessionToken) {
+      fetchEggOrders(sessionToken);
+    }
+  }, [sessionToken]);
+
+  const saveEggOrders = async (updatedOrders) => {
+    try {
+      localStorage.setItem('vollmers_egg_orders', JSON.stringify(updatedOrders));
+    } catch (e) {}
+
+    const res = await fetch('/api/admin/eier-donnerstag', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sessionToken}`,
+      },
+      body: JSON.stringify({ orders: updatedOrders }),
+    });
+
+    const data = await res.json().catch(() => null);
+    if (!res.ok || !data?.success) {
+      throw new Error(data?.error || 'Konnte Eier-Donnerstag Liste nicht speichern.');
+    }
+    setEggOrders(updatedOrders);
+  };
+
   // 1. Weymann-Login
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -66,7 +161,6 @@ export default function AdminPage({ onNavigate }) {
     setLoginError('');
 
     try {
-      // Client-seitige kryptografische Hash-Prüfung
       const inputHash = await sha256(passwordInput);
       if (inputHash !== ADMIN_HASH) {
         setLoginError('Ungültiges Passwort. Zugriff verweigert.');
@@ -74,7 +168,6 @@ export default function AdminPage({ onNavigate }) {
         return;
       }
 
-      // Server-seitige Verifizierung gegen Worker / API
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -92,7 +185,6 @@ export default function AdminPage({ onNavigate }) {
         setLoginError(data.error || 'Server-Authentifizierung fehlgeschlagen.');
       }
     } catch (err) {
-      // Fallback bei Offline-Betrieb (Hash bereits geprüft)
       const token = 'vollmer_session_' + Date.now();
       sessionStorage.setItem('vollmer_admin_token', token);
       setSessionToken(token);
@@ -105,67 +197,6 @@ export default function AdminPage({ onNavigate }) {
   const handleLogout = () => {
     sessionStorage.removeItem('vollmer_admin_token');
     setSessionToken(null);
-  };
-
-  // 2. Schneller Toggle "Ausverkauft" / "Verfügbar"
-  const handleToggleStock = async (product) => {
-    const updated = products.map(p => {
-      if (p.id === product.id) {
-        return {
-          ...p,
-          isOutOfStock: !p.isOutOfStock,
-          updatedAt: new Date().toISOString()
-        };
-      }
-      return p;
-    });
-
-    try {
-      await saveProductsToKV(updated, sessionToken);
-      showToast(`Status für „${product.name}“ auf ${!product.isOutOfStock ? 'AUSVERKAUFT' : 'VERFÜGBAR'} gesetzt.`);
-    } catch (err) {
-      alert('Fehler beim Aktualisieren: ' + err.message);
-    }
-  };
-
-  // 3. Modal öffnen (Bearbeiten oder Neu)
-  const openEditModal = (product) => {
-    setIsCreatingNew(false);
-    setEditingProduct(product);
-    setModalForm({
-      id: product.id,
-      name: product.name,
-      category: product.category,
-      price: product.price,
-      unit: product.unit || '',
-      badge: product.badge || '',
-      description: product.description || '',
-      details: Array.isArray(product.details) ? product.details.join('\n') : (product.details || ''),
-      availability: product.availability || '',
-      image: product.image || '',
-      isOutOfStock: !!product.isOutOfStock,
-      preorderUrl: product.preorderUrl || ''
-    });
-  };
-
-  const openCreateModal = () => {
-    setIsCreatingNew(true);
-    const newId = 'produkt_' + Date.now().toString(36);
-    setEditingProduct({ id: newId });
-    setModalForm({
-      id: newId,
-      name: '',
-      category: 'eier-nudeln',
-      price: '',
-      unit: '',
-      badge: '',
-      description: '',
-      details: '',
-      availability: 'Stets im 24/7 SB-Hofladen vorrätig',
-      image: '',
-      isOutOfStock: false,
-      preorderUrl: ''
-    });
   };
 
   // Client-seitige Bildkomprimierung (max 1600px, WebP Qualität 0.82)
@@ -191,9 +222,7 @@ export default function AdminPage({ onNavigate }) {
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext('2d');
-          if (!ctx) {
-            return resolve(e.target.result);
-          }
+          if (!ctx) return resolve(e.target.result);
           ctx.drawImage(img, 0, 0, width, height);
 
           try {
@@ -212,13 +241,12 @@ export default function AdminPage({ onNavigate }) {
     });
   };
 
-  // 4. Direkt-Upload nach Cloudflare R2 mit Fallback
-  const handleImageUpload = async (e) => {
+  // Universeller Bild-Upload (für Produkte & Termine)
+  const handleImageUploadFor = async (e, targetType = 'product') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setIsUploadingImage(true);
-
     try {
       showToast('Bild wird optimiert und hochgeladen...');
       const compressedBase64 = await compressImage(file, 1600, 0.82);
@@ -239,22 +267,16 @@ export default function AdminPage({ onNavigate }) {
       let data = null;
       try {
         data = JSON.parse(text);
-      } catch (parseErr) {
-        console.warn('Nicht-JSON Antwort beim Upload:', text.slice(0, 100));
-      }
+      } catch (parseErr) {}
 
-      if (res.ok && data?.success && data?.url) {
-        setModalForm(prev => ({ ...prev, image: data.url }));
-        showToast('Bild erfolgreich hochgeladen!');
-      } else if (!res.ok && (res.status === 405 || res.status === 500 || res.status === 404)) {
-        // Fallback: Bei Backend-Verbindungsproblemen direkt das optimierte Bild lokal hinterlegen
-        setModalForm(prev => ({ ...prev, image: compressedBase64 }));
-        showToast('Bild übernommen (lokales Backup verwendet).');
+      const finalUrl = (res.ok && data?.success && data?.url) ? data.url : compressedBase64;
+      if (targetType === 'event') {
+        setEventForm(prev => ({ ...prev, image: finalUrl }));
       } else {
-        alert('Upload-Fehler: ' + (data?.error || `HTTP ${res.status}`));
+        setModalForm(prev => ({ ...prev, image: finalUrl }));
       }
+      showToast('Bild erfolgreich hinterlegt!');
     } catch (err) {
-      console.error('Fehler beim Upload:', err);
       alert('Upload fehlgeschlagen: ' + err.message);
     } finally {
       setIsUploadingImage(false);
@@ -262,16 +284,74 @@ export default function AdminPage({ onNavigate }) {
     }
   };
 
-  // 5. Änderungen speichern (in Cloudflare KV)
+  // =========================================================================
+  // LOGIK A: SORTIMENT
+  // =========================================================================
+  const handleToggleStock = async (product) => {
+    const updated = products.map(p => {
+      if (p.id === product.id) {
+        return {
+          ...p,
+          isOutOfStock: !p.isOutOfStock,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return p;
+    });
+
+    try {
+      await saveProductsToKV(updated, sessionToken);
+      showToast(`Status für „${product.name}“ auf ${!product.isOutOfStock ? 'AUSVERKAUFT' : 'VERFÜGBAR'} gesetzt.`);
+    } catch (err) {
+      alert('Fehler beim Aktualisieren: ' + err.message);
+    }
+  };
+
+  const openEditModal = (product) => {
+    setIsCreatingNew(false);
+    setEditingProduct(product);
+    setModalForm({
+      id: product.id,
+      name: product.name,
+      category: product.category,
+      unit: product.unit || '',
+      badge: product.badge || '',
+      description: product.description || '',
+      details: Array.isArray(product.details) ? product.details.join('\n') : (product.details || ''),
+      availability: product.availability || '',
+      image: product.image || '',
+      isOutOfStock: !!product.isOutOfStock,
+      preorderUrl: product.preorderUrl || ''
+    });
+  };
+
+  const openCreateModal = () => {
+    setIsCreatingNew(true);
+    const newId = 'produkt_' + Date.now().toString(36);
+    setEditingProduct({ id: newId });
+    setModalForm({
+      id: newId,
+      name: '',
+      category: 'eier-nudeln',
+      unit: '',
+      badge: '',
+      description: '',
+      details: '',
+      availability: 'Stets im 24/7 SB-Hofladen vorrätig',
+      image: '',
+      isOutOfStock: false,
+      preorderUrl: ''
+    });
+  };
+
   const handleSaveModal = async (e) => {
     e.preventDefault();
-    if (!modalForm.name || !modalForm.price) {
-      alert('Bitte Produktname und Preis angeben.');
+    if (!modalForm.name) {
+      alert('Bitte Produktname angeben.');
       return;
     }
 
     setIsSaving(true);
-
     const detailsArray = modalForm.details
       ? modalForm.details.split('\n').map(s => s.trim()).filter(Boolean)
       : [];
@@ -287,8 +367,9 @@ export default function AdminPage({ onNavigate }) {
     } else {
       updatedProducts = products.map(p => {
         if (p.id === modalForm.id) {
+          const { price, ...restProduct } = p;
           return {
-            ...p,
+            ...restProduct,
             ...modalForm,
             details: detailsArray,
             updatedAt: new Date().toISOString()
@@ -309,12 +390,8 @@ export default function AdminPage({ onNavigate }) {
     }
   };
 
-  // 6. Produkt löschen
   const handleDeleteProduct = async (product) => {
-    if (!window.confirm(`Möchtest du „${product.name}“ wirklich löschen?`)) {
-      return;
-    }
-
+    if (!window.confirm(`Möchtest du „${product.name}“ wirklich löschen?`)) return;
     const updated = products.filter(p => p.id !== product.id);
     try {
       await saveProductsToKV(updated, sessionToken);
@@ -324,10 +401,167 @@ export default function AdminPage({ onNavigate }) {
     }
   };
 
+  // =========================================================================
+  // LOGIK B: EIER-DONNERSTAG
+  // =========================================================================
+  const openCreateEggOrder = () => {
+    setIsCreatingEggOrder(true);
+    const newId = 'egg_' + Date.now().toString(36);
+    setEditingEggOrder({ id: newId });
+    setEggForm({
+      id: newId,
+      name: '',
+      address: '',
+      email: '',
+      eggCount: 10,
+      message: '',
+    });
+  };
+
+  const openEditEggOrder = (order) => {
+    setIsCreatingEggOrder(false);
+    setEditingEggOrder(order);
+    setEggForm({
+      id: order.id,
+      name: order.name || '',
+      address: order.address || '',
+      email: order.email || '',
+      eggCount: order.eggCount || 10,
+      message: order.message || '',
+    });
+  };
+
+  const handleSaveEggOrder = async (e) => {
+    e.preventDefault();
+    if (!eggForm.name.trim() || !eggForm.address.trim() || !eggForm.eggCount) {
+      alert('Bitte Name, Adresse und Eieranzahl angeben.');
+      return;
+    }
+
+    setIsSaving(true);
+    const cleanAddress = eggForm.address.trim().toLowerCase().includes('machtsum')
+      ? eggForm.address.trim()
+      : `${eggForm.address.trim()}, 31177 Machtsum`;
+
+    const normalizedEntry = {
+      ...eggForm,
+      name: eggForm.name.trim(),
+      address: cleanAddress,
+      email: eggForm.email.trim(),
+      eggCount: Number(eggForm.eggCount) || eggForm.eggCount,
+      message: eggForm.message.trim(),
+      createdAt: editingEggOrder?.createdAt || new Date().toISOString(),
+    };
+
+    const updated = isCreatingEggOrder
+      ? [normalizedEntry, ...eggOrders]
+      : eggOrders.map(o => (o.id === normalizedEntry.id ? normalizedEntry : o));
+
+    try {
+      await saveEggOrders(updated);
+      showToast(isCreatingEggOrder ? 'Eintrag zum Eier-Donnerstag hinzugefügt!' : 'Eintrag aktualisiert!');
+      setEditingEggOrder(null);
+    } catch (err) {
+      alert('Fehler beim Speichern: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteEggOrder = async (order) => {
+    if (!window.confirm(`Eintrag von „${order.name}“ wirklich aus dem Eier-Donnerstag entfernen?`)) return;
+    const updated = eggOrders.filter(o => o.id !== order.id);
+    try {
+      await saveEggOrders(updated);
+      showToast(`Eintrag von „${order.name}“ entfernt.`);
+    } catch (err) {
+      alert('Fehler beim Löschen: ' + err.message);
+    }
+  };
+
+  // =========================================================================
+  // LOGIK C: TERMINE & MÄRKTE
+  // =========================================================================
+  const openCreateEvent = () => {
+    setIsCreatingEvent(true);
+    const newId = 'termin_' + Date.now().toString(36);
+    setEditingEvent({ id: newId });
+    setEventForm({
+      id: newId,
+      title: '',
+      date: '2026-12-13',
+      time: 'Ab 14:00 Uhr',
+      location: '',
+      badge: 'Unser Marktstand vor Ort',
+      description: '',
+      image: '',
+    });
+  };
+
+  const openEditEvent = (ev) => {
+    setIsCreatingEvent(false);
+    setEditingEvent(ev);
+    setEventForm({
+      id: ev.id,
+      title: ev.title || '',
+      date: ev.date || '',
+      time: ev.time || '',
+      location: ev.location || '',
+      badge: ev.badge || '',
+      description: ev.description || '',
+      image: ev.image || '',
+    });
+  };
+
+  const handleSaveEvent = async (e) => {
+    e.preventDefault();
+    if (!eventForm.title.trim() || !eventForm.date.trim() || !eventForm.location.trim()) {
+      alert('Bitte Titel, Datum und Ort des Termins angeben.');
+      return;
+    }
+
+    setIsSaving(true);
+    const entry = {
+      ...eventForm,
+      title: eventForm.title.trim(),
+      date: eventForm.date.trim(),
+      time: eventForm.time.trim(),
+      location: eventForm.location.trim(),
+      badge: eventForm.badge.trim(),
+      description: eventForm.description.trim(),
+      image: eventForm.image.trim(),
+    };
+
+    const updated = isCreatingEvent
+      ? [...events, entry]
+      : events.map(ev => (ev.id === entry.id ? entry : ev));
+
+    try {
+      await saveEventsToKV(updated, sessionToken);
+      showToast(isCreatingEvent ? 'Neuer Termin eingetragen!' : 'Termin aktualisiert!');
+      setEditingEvent(null);
+    } catch (err) {
+      alert('Fehler beim Speichern des Termins: ' + err.message);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteEvent = async (ev) => {
+    if (!window.confirm(`Möchtest du den Termin „${ev.title}“ wirklich löschen?`)) return;
+    const updated = events.filter(item => item.id !== ev.id);
+    try {
+      await saveEventsToKV(updated, sessionToken);
+      showToast(`Termin „${ev.title}“ gelöscht.`);
+    } catch (err) {
+      alert('Fehler beim Löschen: ' + err.message);
+    }
+  };
+
   // Filtered Products
   const visibleProducts = products.filter(p => {
     const matchesCat = filterCategory === 'all' || p.category === filterCategory;
-    const matchesSearch = !searchQuery || 
+    const matchesSearch = !searchQuery ||
       p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (p.description && p.description.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchesCat && matchesSearch;
@@ -340,7 +574,6 @@ export default function AdminPage({ onNavigate }) {
     return (
       <div className="min-h-screen bg-canvas flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md bg-canvas-card rounded-3xl p-6 sm:p-10 border border-ink-border shadow-elevated">
-          
           <div className="text-center mb-6 sm:mb-8">
             <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-forest-tint border border-forest-border flex items-center justify-center mx-auto text-forest mb-3.5 sm:mb-4 shadow-subtle">
               <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
@@ -352,7 +585,7 @@ export default function AdminPage({ onNavigate }) {
               Vollmer’s Hofladen Admin
             </h1>
             <p className="text-xs text-ink-muted mt-1.5 sm:mt-2">
-              Verwaltung von Sortiment, Preisen, Ausverkauft-Status und Bildern
+              Verwaltung von Sortiment, Eier-Donnerstag und Marktterminen
             </p>
           </div>
 
@@ -413,10 +646,11 @@ export default function AdminPage({ onNavigate }) {
   }
 
   // =========================================================================
-  // VIEW B: DASHBOARD / PRODUCT MANAGER
+  // VIEW B: DASHBOARD
   // =========================================================================
   const outOfStockCount = products.filter(p => p.isOutOfStock).length;
   const inStockCount = products.length - outOfStockCount;
+  const totalEggCount = eggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
 
   return (
     <div className="min-h-screen bg-canvas text-ink py-10 px-4 sm:px-6 lg:px-8">
@@ -432,43 +666,38 @@ export default function AdminPage({ onNavigate }) {
 
         {/* Top Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-ink-border">
-          <div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => onNavigate('home')}
-                className="p-2 rounded-xl bg-canvas-card border border-ink-border text-ink-muted hover:text-ink transition-colors shrink-0"
-                title="Zur Website zurückkehren"
-              >
-                <ArrowLeft className="w-4 h-4" />
-              </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => onNavigate('home')}
+              className="p-2 rounded-xl bg-canvas-card border border-ink-border text-ink-muted hover:text-ink transition-colors shrink-0"
+              title="Zur Website zurückkehren"
+            >
+              <ArrowLeft className="w-4 h-4" />
+            </button>
+            <div>
               <h1 className="font-serif text-2xl sm:text-3xl lg:text-4xl text-ink">
-                Hofladen Sortimentsverwaltung
+                Vollmer’s Hofladen Verwaltung
               </h1>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <button
-              onClick={refreshProducts}
-              className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-ink-muted hover:text-ink transition-colors flex items-center justify-center gap-2"
-              title="Daten neu laden"
+              onClick={() => {
+                refreshProducts();
+                refreshEvents();
+                fetchEggOrders();
+                showToast('Daten aktualisiert.');
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-ink-muted hover:text-ink transition-colors flex items-center gap-2"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>Aktualisieren</span>
             </button>
 
             <button
-              onClick={openCreateModal}
-              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2 order-first sm:order-none"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Neues Produkt anlegen</span>
-            </button>
-
-            <button
               onClick={handleLogout}
-              className="flex-1 sm:flex-initial px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors flex items-center justify-center gap-1.5"
-              title="Abmelden"
+              className="px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1.5"
             >
               <LogOut className="w-3.5 h-3.5" />
               <span>Abmelden</span>
@@ -476,191 +705,503 @@ export default function AdminPage({ onNavigate }) {
           </div>
         </div>
 
-        {/* Stats Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
-          <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
-            <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider block">
-              Gesamtes Sortiment
-            </span>
-            <span className="font-serif text-2xl sm:text-3xl text-ink font-bold block mt-1">
-              {products.length} Artikel
-            </span>
-          </div>
-
-          <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
-            <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider block">
-              Aktuell Verfügbar
-            </span>
-            <span className="font-serif text-2xl sm:text-3xl text-emerald-800 font-bold block mt-1">
-              {inStockCount} Artikel
-            </span>
-          </div>
-
-          <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
-            <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider block">
-              Als Ausverkauft markiert
-            </span>
-            <span className="font-serif text-2xl sm:text-3xl text-amber-800 font-bold block mt-1">
-              {outOfStockCount} Artikel
-            </span>
-          </div>
-        </div>
-
-        {/* Search & Category Filter */}
-        <div className="p-3 sm:p-4 rounded-2xl bg-canvas-card border border-ink-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
-          <div className="relative w-full sm:w-80">
-            <Search className="w-4 h-4 text-ink-faint absolute left-3.5 top-3.5" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Produkt suchen..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-canvas border border-ink-border text-base sm:text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-forest"
-            />
-          </div>
-
-          <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto no-scrollbar touch-scroll pb-1 sm:pb-0">
-            {CATEGORIES.map(cat => (
-              <button
-                key={cat.id}
-                onClick={() => setFilterCategory(cat.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
-                  filterCategory === cat.id
-                    ? 'bg-forest text-white'
-                    : 'bg-canvas text-ink-muted hover:text-ink border border-ink-border/60'
-                }`}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Product Cards Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {visibleProducts.map(product => (
-            <div 
-              key={product.id}
-              className={`rounded-3xl bg-canvas-card border overflow-hidden shadow-subtle flex flex-col transition-all ${
-                product.isOutOfStock 
-                  ? 'border-amber-300/80 bg-amber-50/20' 
-                  : 'border-ink-border'
+        {/* Reiter / Tab Navigation */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="inline-flex p-1.5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle gap-1 overflow-x-auto max-w-full">
+            <button
+              onClick={() => setActiveTab('sortiment')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'sortiment'
+                  ? 'bg-forest text-white shadow-subtle'
+                  : 'text-ink-muted hover:text-ink hover:bg-canvas'
               }`}
             >
-              {/* Image & Status Badge */}
-              <div className="aspect-[16/10] sm:aspect-[4/3] relative overflow-hidden bg-[#F5F2EA]">
-                {product.image ? (
-                  <img
-                    src={product.image}
-                    alt={product.name}
-                    className={`w-full h-full object-cover transition-transform ${product.isOutOfStock ? 'opacity-70 grayscale-[30%]' : ''}`}
-                  />
-                ) : (
-                  <div className="w-full h-full flex flex-col items-center justify-center text-ink-faint">
-                    <ImageIcon className="w-8 h-8 mb-1" />
-                    <span className="text-xs">Kein Bild hinterlegt</span>
-                  </div>
-                )}
+              <Package className="w-4 h-4" />
+              <span>Sortiment ({products.length})</span>
+            </button>
 
-                {/* Stock Status Badge */}
-                <div className="absolute top-3 left-3">
-                  {product.isOutOfStock ? (
-                    <span className="px-3 py-1 rounded-full bg-amber-600 text-white text-[11px] font-bold shadow-subtle flex items-center gap-1.5">
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>Ausverkauft</span>
-                    </span>
-                  ) : (
-                    <span className="px-3 py-1 rounded-full bg-emerald-700 text-white text-[11px] font-bold shadow-subtle flex items-center gap-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5" />
-                      <span>Verfügbar</span>
-                    </span>
-                  )}
-                </div>
+            <button
+              onClick={() => setActiveTab('eier-donnerstag')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'eier-donnerstag'
+                  ? 'bg-forest text-white shadow-subtle'
+                  : 'text-ink-muted hover:text-ink hover:bg-canvas'
+              }`}
+            >
+              <Egg className="w-4 h-4" />
+              <span>Eier-Donnerstag ({eggOrders.length})</span>
+            </button>
 
-                {product.badge && (
-                  <div className="absolute bottom-3 left-3">
-                    <span className="px-2.5 py-0.5 rounded-full bg-canvas-card/90 backdrop-blur-sm text-forest font-semibold text-[10px] border border-ink-border">
-                      {product.badge}
-                    </span>
-                  </div>
-                )}
-              </div>
+            <button
+              onClick={() => setActiveTab('termine')}
+              className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'termine'
+                  ? 'bg-forest text-white shadow-subtle'
+                  : 'text-ink-muted hover:text-ink hover:bg-canvas'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+              <span>Termine & Märkte ({events.length})</span>
+            </button>
+          </div>
 
-              {/* Info Body */}
-              <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3.5 sm:space-y-4">
-                <div>
-                  <div className="flex items-start justify-between gap-2">
-                    <h3 className="font-serif text-lg sm:text-xl text-ink font-semibold leading-snug">
-                      {product.name}
-                    </h3>
-                  </div>
-                  <p className="text-xs text-ink-muted mt-1.5 line-clamp-2 leading-relaxed">
-                    {product.description || 'Keine Beschreibung hinterlegt.'}
-                  </p>
-                </div>
+          {/* Kontext-Button rechts je nach Tab */}
+          {activeTab === 'sortiment' && (
+            <button
+              onClick={openCreateModal}
+              className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Neues Produkt anlegen</span>
+            </button>
+          )}
 
-                <div className="pt-3 border-t border-ink-border/60 flex items-center justify-between text-xs">
-                  <div>
-                    <span className="font-semibold text-forest text-sm block">{product.price}</span>
-                    <span className="text-ink-faint">{product.unit || 'Standard'}</span>
-                  </div>
-                  <span className="px-2.5 py-1 rounded-lg bg-canvas text-ink-muted text-[11px] border border-ink-border/60">
-                    {CATEGORIES.find(c => c.id === product.category)?.label || product.category}
-                  </span>
-                </div>
+          {activeTab === 'eier-donnerstag' && (
+            <button
+              onClick={openCreateEggOrder}
+              className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Eintrag für Eier-Donnerstag hinzufügen</span>
+            </button>
+          )}
 
-                {/* Actions: Quick Stock Toggle & Edit */}
-                <div className="pt-2 border-t border-ink-border/60 flex items-center gap-2">
-                  <button
-                    onClick={() => handleToggleStock(product)}
-                    className={`flex-1 min-h-[42px] py-2.5 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
-                      product.isOutOfStock
-                        ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                        : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
-                    }`}
-                  >
-                    {product.isOutOfStock ? (
-                      <>
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Auf Verfügbar setzen</span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>Als Ausverkauft markieren</span>
-                      </>
-                    )}
-                  </button>
-
-                  <button
-                    onClick={() => openEditModal(product)}
-                    className="w-10 h-10 shrink-0 rounded-xl bg-canvas hover:bg-canvas-muted text-ink border border-ink-border transition-colors flex items-center justify-center"
-                    title="Produkt bearbeiten & Bild tauschen"
-                  >
-                    <Edit2 className="w-4 h-4" />
-                  </button>
-
-                  <button
-                    onClick={() => handleDeleteProduct(product)}
-                    className="w-10 h-10 shrink-0 rounded-xl bg-canvas hover:bg-red-50 text-red-600 border border-ink-border transition-colors flex items-center justify-center"
-                    title="Produkt löschen"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-
-              </div>
-            </div>
-          ))}
+          {activeTab === 'termine' && (
+            <button
+              onClick={openCreateEvent}
+              className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Neuen Markt / Termin eintragen</span>
+            </button>
+          )}
         </div>
 
-        {/* Modal: Produkt bearbeiten / neu anlegen */}
+        {/* =====================================================================
+            TAB 1: SORTIMENT
+        ===================================================================== */}
+        {activeTab === 'sortiment' && (
+          <div className="space-y-6">
+            {/* Stats Row */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
+                <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider block">
+                  Gesamtes Sortiment
+                </span>
+                <span className="font-serif text-2xl sm:text-3xl text-ink font-bold block mt-1">
+                  {products.length} Artikel
+                </span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
+                <span className="text-xs font-semibold text-emerald-700 uppercase tracking-wider block">
+                  Aktuell Verfügbar
+                </span>
+                <span className="font-serif text-2xl sm:text-3xl text-emerald-800 font-bold block mt-1">
+                  {inStockCount} Artikel
+                </span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
+                <span className="text-xs font-semibold text-amber-700 uppercase tracking-wider block">
+                  Als Ausverkauft markiert
+                </span>
+                <span className="font-serif text-2xl sm:text-3xl text-amber-800 font-bold block mt-1">
+                  {outOfStockCount} Artikel
+                </span>
+              </div>
+            </div>
+
+            {/* Search & Category Filter */}
+            <div className="p-3 sm:p-4 rounded-2xl bg-canvas-card border border-ink-border flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 sm:gap-4">
+              <div className="relative w-full sm:w-80">
+                <Search className="w-4 h-4 text-ink-faint absolute left-3.5 top-3.5" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Produkt suchen..."
+                  className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-canvas border border-ink-border text-base sm:text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-forest"
+                />
+              </div>
+
+              <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto no-scrollbar touch-scroll pb-1 sm:pb-0">
+                {CATEGORIES.map(cat => (
+                  <button
+                    key={cat.id}
+                    onClick={() => setFilterCategory(cat.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium whitespace-nowrap transition-all shrink-0 ${
+                      filterCategory === cat.id
+                        ? 'bg-forest text-white'
+                        : 'bg-canvas text-ink-muted hover:text-ink border border-ink-border/60'
+                    }`}
+                  >
+                    {cat.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Product Cards Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {visibleProducts.map(product => (
+                <div
+                  key={product.id}
+                  className={`rounded-3xl bg-canvas-card border overflow-hidden shadow-subtle flex flex-col transition-all ${
+                    product.isOutOfStock
+                      ? 'border-amber-300/80 bg-amber-50/20'
+                      : 'border-ink-border'
+                  }`}
+                >
+                  <div className="aspect-[16/10] sm:aspect-[4/3] relative overflow-hidden bg-[#F5F2EA]">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className={`w-full h-full object-cover transition-transform ${product.isOutOfStock ? 'opacity-70 grayscale-[30%]' : ''}`}
+                      />
+                    ) : (
+                      <div className="w-full h-full flex flex-col items-center justify-center text-ink-faint">
+                        <ImageIcon className="w-8 h-8 mb-1" />
+                        <span className="text-xs">Kein Bild hinterlegt</span>
+                      </div>
+                    )}
+
+                    <div className="absolute top-3 left-3">
+                      {product.isOutOfStock ? (
+                        <span className="px-3 py-1 rounded-full bg-amber-600 text-white text-[11px] font-bold shadow-subtle flex items-center gap-1.5">
+                          <XCircle className="w-3.5 h-3.5" />
+                          <span>Ausverkauft</span>
+                        </span>
+                      ) : (
+                        <span className="px-3 py-1 rounded-full bg-emerald-700 text-white text-[11px] font-bold shadow-subtle flex items-center gap-1.5">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          <span>Verfügbar</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {product.badge && (
+                      <div className="absolute bottom-3 left-3">
+                        <span className="px-2.5 py-0.5 rounded-full bg-canvas-card/90 backdrop-blur-sm text-forest font-semibold text-[10px] border border-ink-border">
+                          {product.badge}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="p-4 sm:p-5 flex-1 flex flex-col justify-between space-y-3.5 sm:space-y-4">
+                    <div>
+                      <h3 className="font-serif text-lg sm:text-xl text-ink font-semibold leading-snug">
+                        {product.name}
+                      </h3>
+                      <p className="text-xs text-ink-muted mt-1.5 line-clamp-2 leading-relaxed">
+                        {product.description || 'Keine Beschreibung hinterlegt.'}
+                      </p>
+                    </div>
+
+                    <div className="pt-3 border-t border-ink-border/60 flex items-center justify-between text-xs gap-2">
+                      <span className="font-medium text-forest truncate">{product.unit || 'Standard'}</span>
+                      <span className="px-2.5 py-1 rounded-lg bg-canvas text-ink-muted text-[11px] border border-ink-border/60 shrink-0">
+                        {CATEGORIES.find(c => c.id === product.category)?.label || product.category}
+                      </span>
+                    </div>
+
+                    <div className="pt-2 border-t border-ink-border/60 flex items-center gap-2">
+                      <button
+                        onClick={() => handleToggleStock(product)}
+                        className={`flex-1 min-h-[42px] py-2.5 px-3 rounded-xl text-xs font-semibold transition-colors flex items-center justify-center gap-1.5 ${
+                          product.isOutOfStock
+                            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                            : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
+                        }`}
+                      >
+                        {product.isOutOfStock ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>Auf Verfügbar setzen</span>
+                          </>
+                        ) : (
+                          <>
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Als Ausverkauft markieren</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        onClick={() => openEditModal(product)}
+                        className="w-10 h-10 shrink-0 rounded-xl bg-canvas hover:bg-canvas-muted text-ink border border-ink-border transition-colors flex items-center justify-center"
+                        title="Produkt bearbeiten"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteProduct(product)}
+                        className="w-10 h-10 shrink-0 rounded-xl bg-canvas hover:bg-red-50 text-red-600 border border-ink-border transition-colors flex items-center justify-center"
+                        title="Produkt löschen"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            TAB 2: EIER-DONNERSTAG (Kompakte & übersichtliche Liste)
+        ===================================================================== */}
+        {activeTab === 'eier-donnerstag' && (
+          <div className="space-y-6">
+            {/* Kurz-Statistik */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
+              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
+                <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider block">
+                  Eingetragene Haushalte
+                </span>
+                <span className="font-serif text-2xl sm:text-3xl text-ink font-bold block mt-1">
+                  {eggOrders.length} {eggOrders.length === 1 ? 'Haushalt' : 'Haushalte'}
+                </span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
+                <span className="text-xs font-semibold text-forest uppercase tracking-wider block">
+                  Gesamtmenge Eier (Donnerstag)
+                </span>
+                <span className="font-serif text-2xl sm:text-3xl text-forest font-bold block mt-1">
+                  {totalEggCount} Eier
+                </span>
+              </div>
+
+              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
+                <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider block">
+                  Liefergebiet & Abrechnung
+                </span>
+                <span className="font-serif text-xl sm:text-2xl text-ink font-bold block mt-1">
+                  31177 Machtsum • Bar
+                </span>
+              </div>
+            </div>
+
+            {/* Kompakte Übersichtstabelle / Liste */}
+            <div className="rounded-3xl bg-canvas-card border border-ink-border shadow-subtle overflow-hidden">
+              <div className="px-5 py-4 border-b border-ink-border bg-canvas flex items-center justify-between">
+                <div>
+                  <h2 className="font-serif text-xl sm:text-2xl text-ink">
+                    Teilnehmerliste Eier-Donnerstag
+                  </h2>
+                  <p className="text-xs text-ink-muted">
+                    Alle eingetragenen Lieferadressen in Machtsum mit Eieranzahl, E-Mail und Nachricht
+                  </p>
+                </div>
+              </div>
+
+              {eggLoading ? (
+                <div className="p-10 text-center text-ink-muted text-sm flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Lade Einträge...</span>
+                </div>
+              ) : eggOrders.length === 0 ? (
+                <div className="p-10 text-center space-y-3">
+                  <Egg className="w-8 h-8 text-forest mx-auto stroke-[1.5]" />
+                  <p className="text-sm text-ink-muted">
+                    Noch keine Anmeldungen für den Eier-Donnerstag vorhanden.
+                  </p>
+                  <button
+                    onClick={openCreateEggOrder}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-forest text-white text-xs font-semibold"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Ersten Eintrag manuell anlegen</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="divide-y divide-ink-border/70">
+                  {/* Tabellenkopf (Desktop) */}
+                  <div className="hidden lg:grid lg:grid-cols-12 gap-4 px-6 py-3 bg-canvas-muted text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                    <div className="col-span-3">Name & E-Mail</div>
+                    <div className="col-span-3">Adresse (Machtsum)</div>
+                    <div className="col-span-2">Anzahl Eier</div>
+                    <div className="col-span-3">Nachricht / Hinweis</div>
+                    <div className="col-span-1 text-right">Aktion</div>
+                  </div>
+
+                  {eggOrders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="p-4 sm:px-6 sm:py-3.5 hover:bg-canvas/60 transition-colors grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-4 items-center text-xs"
+                    >
+                      {/* Name & E-Mail */}
+                      <div className="lg:col-span-3 min-w-0">
+                        <strong className="text-sm text-ink font-semibold block truncate">
+                          {order.name}
+                        </strong>
+                        {order.email && (
+                          <a
+                            href={`mailto:${order.email}`}
+                            className="text-ink-muted hover:text-forest truncate flex items-center gap-1 mt-0.5"
+                          >
+                            <Mail className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{order.email}</span>
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Adresse */}
+                      <div className="lg:col-span-3 flex items-center gap-1.5 text-ink font-medium">
+                        <MapPin className="w-3.5 h-3.5 text-forest shrink-0" />
+                        <span className="truncate">{order.address}</span>
+                      </div>
+
+                      {/* Anzahl Eier */}
+                      <div className="lg:col-span-2">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-forest-tint border border-forest-border text-forest font-bold text-xs">
+                          <Egg className="w-3.5 h-3.5" />
+                          <span>{order.eggCount} Eier</span>
+                        </span>
+                      </div>
+
+                      {/* Nachricht */}
+                      <div className="lg:col-span-3 text-ink-muted">
+                        {order.message ? (
+                          <p className="line-clamp-2 leading-snug bg-canvas px-2.5 py-1.5 rounded-lg border border-ink-border/60">
+                            {order.message}
+                          </p>
+                        ) : (
+                          <span className="text-ink-faint italic">—</span>
+                        )}
+                      </div>
+
+                      {/* Aktionen */}
+                      <div className="lg:col-span-1 flex items-center justify-end gap-1.5 pt-2 lg:pt-0">
+                        <button
+                          onClick={() => openEditEggOrder(order)}
+                          className="p-2 rounded-lg bg-canvas hover:bg-canvas-muted text-ink border border-ink-border transition-colors"
+                          title="Eintrag bearbeiten"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteEggOrder(order)}
+                          className="p-2 rounded-lg bg-canvas hover:bg-red-50 text-red-600 border border-ink-border transition-colors"
+                          title="Eintrag löschen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            TAB 3: TERMINE & MÄRKTE
+        ===================================================================== */}
+        {activeTab === 'termine' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {events.map((ev) => {
+                const hasCustomImg = Boolean(ev.image && ev.image.trim());
+                return (
+                  <div
+                    key={ev.id}
+                    className="rounded-3xl bg-canvas-card border border-ink-border shadow-subtle overflow-hidden flex flex-col justify-between"
+                  >
+                    <div>
+                      <div className="aspect-[16/9] bg-[#F5F2EA] relative overflow-hidden flex items-center justify-center border-b border-ink-border/60">
+                        {hasCustomImg ? (
+                          <img
+                            src={ev.image}
+                            alt={ev.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-6 text-center">
+                            <img
+                              src={PLACEHOLDER_EVENT_IMAGE}
+                              alt="Vollmer's Logo Platzhalter"
+                              className="h-24 w-auto object-contain"
+                            />
+                            <span className="text-[11px] text-ink-muted mt-2">
+                              Standard-Platzhalter (Vollmer’s Logo)
+                            </span>
+                          </div>
+                        )}
+                        {ev.badge && (
+                          <span className="absolute top-3 left-3 px-3 py-1 rounded-full bg-canvas-card/95 text-forest text-[11px] font-semibold border border-ink-border">
+                            {ev.badge}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-5 sm:p-6 space-y-3">
+                        <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-forest">
+                          <span className="flex items-center gap-1">
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span>{ev.date}</span>
+                          </span>
+                          {ev.time && (
+                            <span className="flex items-center gap-1 text-ink-muted">
+                              <Clock className="w-3.5 h-3.5 text-forest" />
+                              <span>{ev.time}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <h3 className="font-serif text-2xl text-ink">{ev.title}</h3>
+
+                        <div className="flex items-center gap-1.5 text-xs text-ink-muted font-medium">
+                          <MapPin className="w-3.5 h-3.5 text-forest shrink-0" />
+                          <span>{ev.location}</span>
+                        </div>
+
+                        {ev.description && (
+                          <p className="text-xs text-ink-muted leading-relaxed pt-2 border-t border-ink-border/60 line-clamp-3">
+                            {ev.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="px-5 py-3.5 bg-canvas border-t border-ink-border flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => openEditEvent(ev)}
+                        className="px-3.5 py-2 rounded-xl bg-canvas-card hover:bg-canvas-muted text-ink border border-ink-border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Edit2 className="w-3.5 h-3.5" />
+                        <span>Bearbeiten</span>
+                      </button>
+                      <button
+                        onClick={() => handleDeleteEvent(ev)}
+                        className="px-3.5 py-2 rounded-xl bg-canvas-card hover:bg-red-50 text-red-600 border border-ink-border text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Löschen</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            MODAL 1: PRODUKT BEARBEITEN / NEU
+        ===================================================================== */}
         {editingProduct && (
-          <div 
+          <div
             className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-sm animate-in fade-in duration-200"
             onClick={() => setEditingProduct(null)}
           >
-            <div 
+            <div
               className="w-full max-w-2xl bg-canvas-card rounded-3xl shadow-2xl border border-ink-border overflow-hidden flex flex-col max-h-[92vh] sm:max-h-[90vh] animate-in zoom-in-95 duration-200"
               onClick={(e) => e.stopPropagation()}
             >
@@ -677,8 +1218,6 @@ export default function AdminPage({ onNavigate }) {
               </div>
 
               <form onSubmit={handleSaveModal} className="p-4 sm:p-6 overflow-y-auto space-y-4 text-xs">
-                
-                {/* Name */}
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                     Produktname *
@@ -693,8 +1232,7 @@ export default function AdminPage({ onNavigate }) {
                   />
                 </div>
 
-                {/* Kategorie & Preis & Einheit */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                       Kategorie *
@@ -712,20 +1250,6 @@ export default function AdminPage({ onNavigate }) {
 
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
-                      Preis *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={modalForm.price}
-                      onChange={(e) => setModalForm({ ...modalForm, price: e.target.value })}
-                      placeholder="z.B. 3,80 €"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-base sm:text-sm focus:outline-none focus:border-forest"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                       Einheit / Packung
                     </label>
                     <input
@@ -738,7 +1262,6 @@ export default function AdminPage({ onNavigate }) {
                   </div>
                 </div>
 
-                {/* Badge & Verfügbarkeitstext */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
@@ -767,7 +1290,6 @@ export default function AdminPage({ onNavigate }) {
                   </div>
                 </div>
 
-                {/* Status Toggle: Ausverkauft */}
                 <div className="p-3.5 rounded-2xl bg-canvas border border-ink-border flex items-center justify-between">
                   <div>
                     <strong className="text-ink text-sm block">Bestandsstatus</strong>
@@ -786,12 +1308,10 @@ export default function AdminPage({ onNavigate }) {
                   </label>
                 </div>
 
-                {/* Direkt-Upload Bild über Cloudflare R2 Pipeline */}
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1.5">
-                    Produktbild (Direkter Upload in Cloudflare R2)
+                    Produktbild
                   </label>
-                  
                   <div className="p-4 rounded-2xl bg-canvas border border-ink-border space-y-3">
                     {modalForm.image ? (
                       <div className="flex items-center gap-4">
@@ -801,43 +1321,37 @@ export default function AdminPage({ onNavigate }) {
                           className="w-20 h-20 rounded-xl object-cover border border-ink-border shadow-subtle shrink-0"
                         />
                         <div className="flex-1 min-w-0">
-                          <span className="text-[11px] text-ink-muted block truncate font-mono">
-                            {modalForm.image}
-                          </span>
-                          <span className="text-xs text-emerald-700 font-semibold mt-1 flex items-center gap-1">
+                          <span className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
                             <CheckCircle2 className="w-3.5 h-3.5" />
-                            <span>In Cloudflare R2 gespeichert</span>
+                            <span>Bild hinterlegt</span>
                           </span>
                         </div>
                       </div>
                     ) : null}
 
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
-                      <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle inline-flex items-center justify-center gap-2 w-full sm:w-auto">
-                        {isUploadingImage ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Wird hochgeladen...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4" />
-                            <span>Neues Bild vom Gerät hochladen</span>
-                          </>
-                        )}
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          disabled={isUploadingImage}
-                          onChange={handleImageUpload}
-                        />
-                      </label>
-                    </div>
+                    <label className="cursor-pointer px-4 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle inline-flex items-center justify-center gap-2 w-full sm:w-auto">
+                      {isUploadingImage ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Wird hochgeladen...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Neues Bild vom Gerät hochladen</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingImage}
+                        onChange={(e) => handleImageUploadFor(e, 'product')}
+                      />
+                    </label>
                   </div>
                 </div>
 
-                {/* Beschreibung */}
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                     Produktbeschreibung
@@ -851,7 +1365,6 @@ export default function AdminPage({ onNavigate }) {
                   ></textarea>
                 </div>
 
-                {/* Highlights / Details (eine Zeile = ein Bullet Point) */}
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                     Detail-Stichpunkte (jede Zeile ein Aufzählungspunkt)
@@ -860,7 +1373,7 @@ export default function AdminPage({ onNavigate }) {
                     rows={3}
                     value={modalForm.details}
                     onChange={(e) => setModalForm({ ...modalForm, details: e.target.value })}
-                    placeholder="100% gentechnikfreie Fütterung&#10;Aus eigener Schlachtung&#10;..."
+                    placeholder="100% gentechnikfreie Fütterung&#10;Aus eigener Haltung..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-base sm:text-xs focus:outline-none focus:border-forest font-mono resize-none"
                   ></textarea>
                 </div>
@@ -873,26 +1386,317 @@ export default function AdminPage({ onNavigate }) {
                   >
                     Abbrechen
                   </button>
-
                   <button
                     type="submit"
                     disabled={isSaving}
                     className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2"
                   >
-                    {isSaving ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Wird gespeichert...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>Produkt speichern</span>
-                      </>
-                    )}
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>Produkt speichern</span>
                   </button>
                 </div>
+              </form>
+            </div>
+          </div>
+        )}
 
+        {/* =====================================================================
+            MODAL 2: EIER-DONNERSTAG EINTRAG HINZUFÜGEN / BEARBEITEN
+        ===================================================================== */}
+        {editingEggOrder && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setEditingEggOrder(null)}
+          >
+            <div
+              className="w-full max-w-lg bg-canvas-card rounded-3xl shadow-2xl border border-ink-border overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-ink-border bg-canvas flex items-center justify-between">
+                <h3 className="font-serif text-xl sm:text-2xl text-ink">
+                  {isCreatingEggOrder ? 'Eier-Donnerstag Eintrag hinzufügen' : 'Eintrag bearbeiten'}
+                </h3>
+                <button
+                  onClick={() => setEditingEggOrder(null)}
+                  className="p-1.5 rounded-lg text-ink-muted hover:text-ink"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEggOrder} className="p-5 sm:p-6 space-y-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                    Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={eggForm.name}
+                    onChange={(e) => setEggForm({ ...eggForm, name: e.target.value })}
+                    placeholder="z.B. Familie Meyer"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Straße & Hausnr. (Machtsum) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={eggForm.address}
+                      onChange={(e) => setEggForm({ ...eggForm, address: e.target.value })}
+                      placeholder="z.B. Lindenallee 15"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Anzahl Eier *
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      required
+                      value={eggForm.eggCount}
+                      onChange={(e) => setEggForm({ ...eggForm, eggCount: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm font-semibold focus:outline-none focus:border-forest"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                    E-Mail-Adresse (optional)
+                  </label>
+                  <input
+                    type="email"
+                    value={eggForm.email}
+                    onChange={(e) => setEggForm({ ...eggForm, email: e.target.value })}
+                    placeholder="name@beispiel.de"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                    Nachricht / Ablagehinweis (optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={eggForm.message}
+                    onChange={(e) => setEggForm({ ...eggForm, message: e.target.value })}
+                    placeholder="z.B. Vor die Haustür stellen..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest resize-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-ink-border flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingEggOrder(null)}
+                    className="px-4 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink-muted font-semibold"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-5 py-2.5 rounded-xl bg-forest text-white font-semibold hover:bg-forest-hover flex items-center gap-2"
+                  >
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>Eintrag speichern</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================================
+            MODAL 3: TERMIN / MARKT HINZUFÜGEN & BEARBEITEN
+        ===================================================================== */}
+        {editingEvent && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => setEditingEvent(null)}
+          >
+            <div
+              className="w-full max-w-xl bg-canvas-card rounded-3xl shadow-2xl border border-ink-border overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="px-5 py-4 border-b border-ink-border bg-canvas flex items-center justify-between">
+                <h3 className="font-serif text-xl sm:text-2xl text-ink">
+                  {isCreatingEvent ? 'Neuen Termin / Markt eintragen' : 'Termin bearbeiten'}
+                </h3>
+                <button
+                  onClick={() => setEditingEvent(null)}
+                  className="p-1.5 rounded-lg text-ink-muted hover:text-ink"
+                >
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveEvent} className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                    Titel der Veranstaltung / des Markts *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={eventForm.title}
+                    onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+                    placeholder="z.B. Weihnachtsmarkt in Machtsum"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Datum *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={eventForm.date}
+                      onChange={(e) => setEventForm({ ...eventForm, date: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Uhrzeit *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={eventForm.time}
+                      onChange={(e) => setEventForm({ ...eventForm, time: e.target.value })}
+                      placeholder="z.B. Ab 14:00 Uhr"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Ort / Standort *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={eventForm.location}
+                      onChange={(e) => setEventForm({ ...eventForm, location: e.target.value })}
+                      placeholder="z.B. Sültenpaul • Lindenallee am Sportplatz"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Kleines Badge (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={eventForm.badge}
+                      onChange={(e) => setEventForm({ ...eventForm, badge: e.target.value })}
+                      placeholder="z.B. Unser Marktstand vor Ort"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    />
+                  </div>
+                </div>
+
+                {/* Bild oder Vollmer's Logo als Platzhalter */}
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1.5">
+                    Bild (optional – ohne Bild wird das Vollmer’s Logo als Platzhalter gezeigt)
+                  </label>
+                  <div className="p-4 rounded-2xl bg-canvas border border-ink-border space-y-3">
+                    <div className="flex items-center gap-4">
+                      <div className="w-20 h-16 rounded-xl bg-[#F5F2EA] border border-ink-border flex items-center justify-center overflow-hidden shrink-0">
+                        {eventForm.image ? (
+                          <img src={eventForm.image} alt="Termin" className="w-full h-full object-cover" />
+                        ) : (
+                          <img src={PLACEHOLDER_EVENT_IMAGE} alt="Logo Platzhalter" className="h-12 w-auto object-contain" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs font-semibold text-ink block">
+                          {eventForm.image ? 'Eigenes Veranstaltungsbild ausgewählt' : 'Vollmer’s Logo als Platzhalter aktiv'}
+                        </span>
+                        {eventForm.image && (
+                          <button
+                            type="button"
+                            onClick={() => setEventForm({ ...eventForm, image: '' })}
+                            className="text-[11px] text-red-600 hover:underline mt-1"
+                          >
+                            Bild entfernen & Logo-Platzhalter nutzen
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <label className="cursor-pointer px-4 py-2 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors inline-flex items-center gap-2">
+                      {isUploadingImage ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          <span>Wird hochgeladen...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Eigenes Bild hochladen</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={isUploadingImage}
+                        onChange={(e) => handleImageUploadFor(e, 'event')}
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                    Kurze Beschreibung (zum Aufklappen im Kalender)
+                  </label>
+                  <textarea
+                    rows={3}
+                    value={eventForm.description}
+                    onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
+                    placeholder="Weitere Infos zu unserem Stand, Angeboten vor Ort..."
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest resize-none"
+                  />
+                </div>
+
+                <div className="pt-3 border-t border-ink-border flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setEditingEvent(null)}
+                    className="px-4 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink-muted font-semibold"
+                  >
+                    Abbrechen
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="px-5 py-2.5 rounded-xl bg-forest text-white font-semibold hover:bg-forest-hover flex items-center gap-2"
+                  >
+                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                    <span>Termin speichern</span>
+                  </button>
+                </div>
               </form>
             </div>
           </div>

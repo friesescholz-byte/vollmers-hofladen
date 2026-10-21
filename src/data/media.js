@@ -1,9 +1,10 @@
 export const R2_BASE = "https://pub-b33108412309406a9a941ddc51e9a5b9.r2.dev/Vollmers-Hofladen";
 
 export const MEDIA = {
-  // Logo
+  // Logo & Favicon
   logo: `${R2_BASE}/Vollmers_Hofladen_15.webp`,
-  logoTransparent: `${R2_BASE}/Vollmers_Hofladen_Logo_Transparent.webp`,
+  logoTransparent: `${R2_BASE}/Vollmers_Hofladen_Logo_Clean.webp`,
+  favicon: `${R2_BASE}/Flavicon_Vollmers_Hofladen_01.webp`,
 
   // Über uns Portrait (Felix Vollmer & Partnerin vor der Bockwindmühle)
   portraitFelix: `${R2_BASE}/Vollmers_Hofladen_07.webp`,
