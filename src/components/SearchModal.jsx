@@ -34,7 +34,7 @@ export default function SearchModal({ isOpen, onClose, onNavigate, onSelectProdu
 
   const quickPages = [
     { title: 'Sortiment & Hofladen', page: 'produkte', desc: 'Eier, Nudeln, Duroc, Honig und mehr' },
-    { title: 'Machtsumer Eier-Donnerstag', page: 'eier-donnerstag', desc: 'Haustür-Lieferung donnerstags in Machtsum' },
+    { title: 'Eier-Donnerstag', page: 'eier-donnerstag', desc: 'Haustür-Lieferung donnerstags in der Region' },
     { title: 'Termine & Märkte', page: 'termine', desc: 'Weihnachtsmarkt am Sültenpaul & Marktstände' },
     { title: 'Freilandhaltung', page: 'freilandhaltung', desc: 'Mobilstall für Hühner & Duroc-Weide' },
     { title: 'Über uns', page: 'ueber-uns', desc: 'Familie Vollmer, Chronologie & Windmühle' },

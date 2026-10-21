@@ -23,6 +23,46 @@ async function sha256(message) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem('vollmer_device_id');
+    if (!id) {
+      id = 'dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 9);
+      localStorage.setItem('vollmer_device_id', id);
+    }
+    return id;
+  } catch (e) {
+    return 'dev_fallback_' + Date.now();
+  }
+}
+
+function getDeviceName() {
+  if (typeof navigator === 'undefined') return 'Webbrowser';
+  const ua = navigator.userAgent || '';
+  if (/iPad|iPhone|iPod/.test(ua)) return 'Apple iPhone / iPad';
+  if (/Android/.test(ua)) return 'Android Smartphone';
+  if (/Mac OS X|Macintosh/.test(ua)) return 'Apple Mac';
+  if (/Windows/.test(ua)) return 'Windows PC';
+  if (/Linux/.test(ua)) return 'Linux Computer';
+  return 'Webbrowser';
+}
+
+function getInitialTab() {
+  try {
+    const hash = window.location.hash || '';
+    const qIdx = hash.indexOf('?');
+    if (qIdx !== -1) {
+      const p = new URLSearchParams(hash.slice(qIdx));
+      const t = p.get('tab');
+      if (['sortiment', 'eier-donnerstag', 'termine'].includes(t)) return t;
+    }
+    const sp = new URLSearchParams(window.location.search);
+    const t = sp.get('tab');
+    if (['sortiment', 'eier-donnerstag', 'termine'].includes(t)) return t;
+  } catch (e) {}
+  return 'sortiment';
+}
+
 export default function AdminPage({ onNavigate }) {
   const {
     products,
@@ -34,14 +74,50 @@ export default function AdminPage({ onNavigate }) {
   } = useProducts();
 
   const [sessionToken, setSessionToken] = useState(() => {
-    return sessionStorage.getItem('vollmer_admin_token') || null;
+    try {
+      return sessionStorage.getItem('vollmer_admin_token') || localStorage.getItem('vollmer_admin_token') || null;
+    } catch (e) {
+      return null;
+    }
   });
 
-  const [activeTab, setActiveTab] = useState('sortiment'); // 'sortiment' | 'eier-donnerstag' | 'termine'
+  const [activeTab, setActiveTab] = useState(getInitialTab);
+
+  const switchTab = (tab) => {
+    setActiveTab(tab);
+    try {
+      window.history.replaceState(null, '', '#admin?tab=' + tab);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    const handleHash = () => {
+      const t = getInitialTab();
+      if (t && t !== activeTab) {
+        setActiveTab(t);
+      }
+    };
+    window.addEventListener('hashchange', handleHash);
+    return () => window.removeEventListener('hashchange', handleHash);
+  }, [activeTab]);
 
   const [passwordInput, setPasswordInput] = useState('');
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
+
+  // 2FA / Login State
+  const [authStep, setAuthStep] = useState('password'); // 'password' | '2fa'
+  const [twoFactorCode, setTwoFactorCode] = useState('');
+  const [twoFactorError, setTwoFactorError] = useState('');
+  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
+  const [trustDevice, setTrustDevice] = useState(true);
+  const [maskedEmail, setMaskedEmail] = useState('friese.scholz@gmail.com');
+  const [pendingDeviceId, setPendingDeviceId] = useState('');
+
+  // Trusted Devices Management
+  const [isDevicesModalOpen, setIsDevicesModalOpen] = useState(false);
+  const [trustedDevices, setTrustedDevices] = useState([]);
+  const [loadingDevices, setLoadingDevices] = useState(false);
 
   // Filter & Search (Sortiment)
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,11 +270,12 @@ export default function AdminPage({ onNavigate }) {
     setEggOrders(updatedOrders);
   };
 
-  // 1. Weymann-Login
+  // 1. Weymann-Login mit 2FA & Geräte-Erkennung
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginLoading(true);
     setLoginError('');
+    setTwoFactorError('');
 
     try {
       const inputHash = await sha256(passwordInput);
@@ -208,35 +285,187 @@ export default function AdminPage({ onNavigate }) {
         return;
       }
 
+      const deviceId = getDeviceId();
+      const deviceName = getDeviceName();
+
       const res = await fetch('/api/admin/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password: passwordInput })
+        body: JSON.stringify({
+          password: passwordInput,
+          deviceId,
+          deviceName,
+        }),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
+        if (data.requires2FA) {
+          // Neues Gerät -> 2FA-Code eingeben
+          setAuthStep('2fa');
+          setPendingDeviceId(data.deviceId || deviceId);
+          if (data.emailMasked) setMaskedEmail(data.emailMasked);
+          setLoginLoading(false);
+          return;
+        }
+
+        // Bekanntes Gerät -> Sofort einloggen!
         const token = data.token || 'vollmer_session_' + Date.now();
-        sessionStorage.setItem('vollmer_admin_token', token);
+        try {
+          sessionStorage.setItem('vollmer_admin_token', token);
+          localStorage.setItem('vollmer_admin_token', token);
+        } catch (e) {}
         setSessionToken(token);
         setPasswordInput('');
-        showToast('Erfolgreich angemeldet.');
+        showToast('Erfolgreich angemeldet (bekanntes Gerät).');
+
+        // Daten sofort ohne Reload anfordern
+        fetchEggOrders(token);
+        refreshProducts();
+        refreshEvents();
       } else {
         setLoginError(data.error || 'Server-Authentifizierung fehlgeschlagen.');
       }
     } catch (err) {
+      console.warn('Login fallback triggered:', err);
       const token = 'vollmer_session_' + Date.now();
-      sessionStorage.setItem('vollmer_admin_token', token);
+      try {
+        sessionStorage.setItem('vollmer_admin_token', token);
+        localStorage.setItem('vollmer_admin_token', token);
+      } catch (e) {}
       setSessionToken(token);
       setPasswordInput('');
+      fetchEggOrders(token);
+      refreshProducts();
+      refreshEvents();
     } finally {
       setLoginLoading(false);
     }
   };
 
+  const handleVerify2FA = async (e) => {
+    e.preventDefault();
+    const cleanCode = twoFactorCode.trim().replace(/\D/g, '');
+    if (cleanCode.length !== 6) {
+      setTwoFactorError('Bitte den vollständigen 6-stelligen Code eingeben.');
+      return;
+    }
+
+    setTwoFactorLoading(true);
+    setTwoFactorError('');
+
+    try {
+      const deviceId = pendingDeviceId || getDeviceId();
+      const deviceName = getDeviceName();
+
+      const res = await fetch('/api/admin/verify-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          deviceId,
+          code: cleanCode,
+          trustDevice,
+          deviceName,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        const token = data.token || 'vollmer_session_' + Date.now();
+        try {
+          sessionStorage.setItem('vollmer_admin_token', token);
+          localStorage.setItem('vollmer_admin_token', token);
+        } catch (e) {}
+        setSessionToken(token);
+        setPasswordInput('');
+        setTwoFactorCode('');
+        setAuthStep('password');
+        showToast(trustDevice ? 'Gerät gemerkt & erfolgreich angemeldet!' : 'Erfolgreich angemeldet!');
+
+        // Sofort Daten laden
+        fetchEggOrders(token);
+        refreshProducts();
+        refreshEvents();
+      } else {
+        setTwoFactorError(data.error || 'Ungültiger Sicherheitscode.');
+      }
+    } catch (err) {
+      setTwoFactorError('Verbindungsfehler: ' + err.message);
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const handleResend2FA = async () => {
+    setTwoFactorLoading(true);
+    setTwoFactorError('');
+    try {
+      const deviceId = pendingDeviceId || getDeviceId();
+      const deviceName = getDeviceName();
+      const res = await fetch('/api/admin/resend-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ deviceId, deviceName }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.success) {
+        showToast('Neuer 6-stelliger Code per E-Mail gesendet!');
+      } else {
+        setTwoFactorError(data.error || 'Konnte Code nicht erneut senden.');
+      }
+    } catch (err) {
+      setTwoFactorError('Fehler beim erneuten Senden: ' + err.message);
+    } finally {
+      setTwoFactorLoading(false);
+    }
+  };
+
+  const fetchTrustedDevices = async () => {
+    if (!sessionToken) return;
+    setLoadingDevices(true);
+    try {
+      const res = await fetch('/api/admin/trusted-devices', {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTrustedDevices(data.devices || []);
+      }
+    } catch (e) {}
+    setLoadingDevices(false);
+  };
+
+  const removeTrustedDevice = async (deviceId) => {
+    if (!sessionToken) return;
+    try {
+      const res = await fetch('/api/admin/remove-device', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({ deviceId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTrustedDevices(data.devices || []);
+        showToast('Gerät entfernt.');
+      }
+    } catch (e) {
+      alert('Fehler beim Entfernen: ' + e.message);
+    }
+  };
+
   const handleLogout = () => {
-    sessionStorage.removeItem('vollmer_admin_token');
+    try {
+      sessionStorage.removeItem('vollmer_admin_token');
+      localStorage.removeItem('vollmer_admin_token');
+    } catch (e) {}
     setSessionToken(null);
+    setAuthStep('password');
+    setPasswordInput('');
+    setTwoFactorCode('');
+    showToast('Erfolgreich abgemeldet.');
   };
 
   // Client-seitige Bildkomprimierung (max 1600px, WebP Qualität 0.82)
@@ -666,68 +895,176 @@ export default function AdminPage({ onNavigate }) {
   });
 
   // =========================================================================
-  // VIEW A: LOGIN SCREEN (Weymann-Prinzip)
+  // VIEW A: LOGIN SCREEN & 2FA (Weymann-Prinzip & Geräte-Erkennung)
   // =========================================================================
   if (!sessionToken) {
     return (
       <div className="min-h-screen bg-canvas flex items-center justify-center p-4 sm:p-6">
         <div className="w-full max-w-md bg-canvas-card rounded-3xl p-6 sm:p-10 border border-ink-border shadow-elevated">
-          <div className="text-center mb-6 sm:mb-8">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-forest-tint border border-forest-border flex items-center justify-center mx-auto text-forest mb-3.5 sm:mb-4 shadow-subtle">
-              <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
-            </div>
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-forest block mb-1">
-              Geschützter Bereich
-            </span>
-            <h1 className="font-serif text-2xl sm:text-3xl text-ink">
-              Vollmer’s Hofladen Admin
-            </h1>
-            <p className="text-xs text-ink-muted mt-1.5 sm:mt-2">
-              Verwaltung von Sortiment, Eier-Donnerstag und Marktterminen
-            </p>
-          </div>
-
-          <form onSubmit={handleLogin} className="space-y-4">
-            {loginError && (
-              <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{loginError}</span>
-              </div>
-            )}
-
+          
+          {authStep === '2fa' ? (
             <div>
-              <label className="block text-xs font-semibold text-ink uppercase tracking-wider mb-2">
-                Admin-Passwort
-              </label>
-              <input
-                type="password"
-                required
-                autoFocus
-                value={passwordInput}
-                onChange={(e) => setPasswordInput(e.target.value)}
-                placeholder="Passwort eingeben..."
-                className="w-full px-4 py-3.5 rounded-xl bg-canvas border border-ink-border text-ink text-base sm:text-sm placeholder:text-ink-faint focus:outline-none focus:border-forest"
-              />
-            </div>
+              <div className="text-center mb-6 sm:mb-8">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center mx-auto text-forest mb-3.5 sm:mb-4 shadow-subtle">
+                  <ShieldCheck className="w-6 h-6 sm:w-7 sm:h-7" />
+                </div>
+                <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-forest block mb-1">
+                  Sicherheitsprüfung (2FA)
+                </span>
+                <h1 className="font-serif text-2xl sm:text-3xl text-ink">
+                  Code eingeben
+                </h1>
+                <p className="text-xs text-ink-muted mt-2 leading-relaxed">
+                  Wir haben einen 6-stelligen Sicherheitscode an <strong>{maskedEmail}</strong> gesendet.
+                </p>
+              </div>
 
-            <button
-              type="submit"
-              disabled={loginLoading || !passwordInput}
-              className="w-full py-3.5 sm:py-4 rounded-xl bg-forest text-white font-semibold text-sm hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              {loginLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Prüfe Zugangsdaten...</span>
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Anmelden</span>
-                </>
-              )}
-            </button>
-          </form>
+              <form onSubmit={handleVerify2FA} className="space-y-4">
+                {twoFactorError && (
+                  <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{twoFactorError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase tracking-wider mb-2 text-center">
+                    6-stelliger Code
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    required
+                    autoFocus
+                    value={twoFactorCode}
+                    onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    placeholder="123456"
+                    className="w-full text-center text-2xl sm:text-3xl font-mono tracking-[0.35em] sm:tracking-[0.45em] py-3.5 px-4 rounded-xl bg-canvas border border-ink-border text-ink focus:outline-none focus:border-forest"
+                  />
+                  <span className="block text-[11px] text-ink-faint text-center mt-1.5">
+                    ⏱️ 15 Minuten gültig
+                  </span>
+                </div>
+
+                <div className="pt-1">
+                  <label className="flex items-start gap-2.5 p-3 rounded-xl bg-canvas border border-ink-border cursor-pointer hover:border-forest/40 transition-colors">
+                    <input
+                      type="checkbox"
+                      checked={trustDevice}
+                      onChange={(e) => setTrustDevice(e.target.checked)}
+                      className="mt-0.5 rounded border-ink-border text-forest focus:ring-forest w-4 h-4"
+                    />
+                    <div className="text-xs">
+                      <span className="font-semibold text-ink block">Dieses Gerät merken</span>
+                      <span className="text-ink-muted text-[11px]">
+                        Künftige Logins auf diesem Gerät ohne E-Mail-Code.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={twoFactorLoading || twoFactorCode.trim().length < 6}
+                  className="w-full py-3.5 sm:py-4 rounded-xl bg-forest text-white font-semibold text-sm hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {twoFactorLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Prüfe Code...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Code bestätigen & Anmelden</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-between text-xs pt-2">
+                  <button
+                    type="button"
+                    onClick={handleResend2FA}
+                    disabled={twoFactorLoading}
+                    className="text-forest hover:underline font-semibold"
+                  >
+                    Code erneut senden
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthStep('password');
+                      setTwoFactorError('');
+                    }}
+                    className="text-ink-muted hover:text-ink transition-colors"
+                  >
+                    Zurück zum Passwort
+                  </button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <div>
+              <div className="text-center mb-6 sm:mb-8">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-forest-tint border border-forest-border flex items-center justify-center mx-auto text-forest mb-3.5 sm:mb-4 shadow-subtle">
+                  <Lock className="w-6 h-6 sm:w-7 sm:h-7" />
+                </div>
+                <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-forest block mb-1">
+                  Geschützter Bereich
+                </span>
+                <h1 className="font-serif text-2xl sm:text-3xl text-ink">
+                  Vollmer’s Hofladen Admin
+                </h1>
+                <p className="text-xs text-ink-muted mt-1.5 sm:mt-2">
+                  Verwaltung von Sortiment, Eier-Donnerstag und Marktterminen
+                </p>
+              </div>
+
+              <form onSubmit={handleLogin} className="space-y-4">
+                {loginError && (
+                  <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-xs font-semibold text-ink uppercase tracking-wider mb-2">
+                    Admin-Passwort
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    autoFocus
+                    value={passwordInput}
+                    onChange={(e) => setPasswordInput(e.target.value)}
+                    placeholder="Passwort eingeben..."
+                    className="w-full px-4 py-3.5 rounded-xl bg-canvas border border-ink-border text-ink text-base sm:text-sm placeholder:text-ink-faint focus:outline-none focus:border-forest"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loginLoading || !passwordInput}
+                  className="w-full py-3.5 sm:py-4 rounded-xl bg-forest text-white font-semibold text-sm hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {loginLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Prüfe Zugangsdaten & Gerät...</span>
+                    </>
+                  ) : (
+                    <>
+                      <ShieldCheck className="w-4 h-4" />
+                      <span>Anmelden</span>
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
 
           <div className="mt-6 sm:mt-8 pt-6 border-t border-ink-border text-center">
             <button
@@ -855,6 +1192,18 @@ export default function AdminPage({ onNavigate }) {
             </button>
 
             <button
+              onClick={() => {
+                fetchTrustedDevices();
+                setIsDevicesModalOpen(true);
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-ink-muted hover:text-ink transition-colors flex items-center gap-2"
+              title="Gemerkte Geräte verwalten"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-forest" />
+              <span>Geräte</span>
+            </button>
+
+            <button
               onClick={handleLogout}
               className="px-3.5 py-2.5 rounded-xl bg-canvas-card border border-ink-border text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors flex items-center gap-1.5"
             >
@@ -868,7 +1217,7 @@ export default function AdminPage({ onNavigate }) {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="inline-flex p-1.5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle gap-1 overflow-x-auto max-w-full">
             <button
-              onClick={() => setActiveTab('sortiment')}
+              onClick={() => switchTab('sortiment')}
               className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'sortiment'
                   ? 'bg-forest text-white shadow-subtle'
@@ -880,7 +1229,7 @@ export default function AdminPage({ onNavigate }) {
             </button>
 
             <button
-              onClick={() => setActiveTab('eier-donnerstag')}
+              onClick={() => switchTab('eier-donnerstag')}
               className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'eier-donnerstag'
                   ? 'bg-forest text-white shadow-subtle'
@@ -892,7 +1241,7 @@ export default function AdminPage({ onNavigate }) {
             </button>
 
             <button
-              onClick={() => setActiveTab('termine')}
+              onClick={() => switchTab('termine')}
               className={`px-4 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 whitespace-nowrap ${
                 activeTab === 'termine'
                   ? 'bg-forest text-white shadow-subtle'
@@ -2284,6 +2633,103 @@ export default function AdminPage({ onNavigate }) {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Gemerkte Geräte & Sicherheit */}
+        {isDevicesModalOpen && (
+          <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-canvas-card rounded-3xl p-6 sm:p-8 max-w-lg w-full border border-ink-border shadow-elevated space-y-6 animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between pb-4 border-b border-ink-border">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-forest-tint border border-forest-border flex items-center justify-center text-forest">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-serif text-xl sm:text-2xl text-ink">
+                      Gemerkte Geräte (2FA)
+                    </h2>
+                    <p className="text-xs text-ink-muted">
+                      Geräte, die ohne E-Mail-Code einloggen dürfen
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsDevicesModalOpen(false)}
+                  className="p-2 rounded-xl text-ink-muted hover:text-ink hover:bg-canvas transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+                {loadingDevices ? (
+                  <div className="py-8 text-center text-xs text-ink-muted flex items-center justify-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-forest" />
+                    <span>Lade vertrauenswürdige Geräte...</span>
+                  </div>
+                ) : trustedDevices.length === 0 ? (
+                  <div className="py-8 text-center text-xs text-ink-muted">
+                    Noch keine gemerkten Geräte hinterlegt. Beim nächsten Login mit aktivierter Option „Dieses Gerät merken“ wird das Gerät hier registriert.
+                  </div>
+                ) : (
+                  trustedDevices.map((dev) => {
+                    const isCurrent = dev.id === getDeviceId();
+                    const addedText = dev.addedAt ? new Date(dev.addedAt).toLocaleDateString('de-DE') : 'Unbekannt';
+                    return (
+                      <div
+                        key={dev.id}
+                        className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 ${
+                          isCurrent ? 'bg-forest/5 border-forest/30' : 'bg-canvas border-ink-border'
+                        }`}
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs sm:text-sm font-semibold text-ink truncate">
+                              {dev.name || 'Gerät'}
+                            </span>
+                            {isCurrent && (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-forest text-white">
+                                Aktuelles Gerät
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-ink-muted block">
+                            Hinzugefügt: {addedText}
+                          </span>
+                        </div>
+
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Möchtest du das Gerät „${dev.name}“ wirklich entfernen? Künftige Logins erfordern wieder einen 2FA-Code.`)) {
+                              removeTrustedDevice(dev.id);
+                            }
+                          }}
+                          className="p-2 rounded-xl text-red-600 hover:bg-red-50 transition-colors shrink-0 text-xs font-semibold flex items-center gap-1"
+                          title="Gerät entfernen"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span className="hidden sm:inline">Entfernen</span>
+                        </button>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+
+              <div className="pt-4 border-t border-ink-border flex items-center justify-between">
+                <span className="text-[11px] text-ink-faint">
+                  Sicherheitscode per Resend an friese.scholz@gmail.com
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsDevicesModalOpen(false)}
+                  className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors"
+                >
+                  Schließen
+                </button>
+              </div>
             </div>
           </div>
         )}

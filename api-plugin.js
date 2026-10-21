@@ -93,18 +93,245 @@ export function apiPlugin() {
           }
 
           // -------------------------------------------------------------
-          // 2. POST /api/admin/login -> Prüft Admin-Passwort
+          // 2. POST /api/admin/login -> Prüft Admin-Passwort & Geräte-Status
           // -------------------------------------------------------------
           if (pathname === '/api/admin/login' && req.method === 'POST') {
-            const { password } = await parseJsonBody();
-            if (password === adminPw) {
-              const token = 'vollmer_session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
-              res.statusCode = 200;
-              return res.end(JSON.stringify({ success: true, token, message: 'Erfolgreich angemeldet' }));
-            } else {
+            const { password, deviceId, deviceName } = await parseJsonBody();
+            if (password !== adminPw) {
               res.statusCode = 401;
               return res.end(JSON.stringify({ success: false, error: 'Ungültiges Passwort' }));
             }
+
+            // Prüfe Trusted Devices
+            let trustedList = [];
+            try {
+              const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvRes.ok) trustedList = await kvRes.json();
+            } catch (e) {}
+
+            const existingDevice = deviceId ? trustedList.find(d => d.id === deviceId) : null;
+            if (existingDevice) {
+              existingDevice.lastUsed = new Date().toISOString();
+              if (deviceName && (!existingDevice.name || existingDevice.name === 'Unbekanntes Gerät')) {
+                existingDevice.name = deviceName;
+              }
+              await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(trustedList)
+              }).catch(() => {});
+
+              const token = 'vollmer_session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+              res.statusCode = 200;
+              return res.end(JSON.stringify({ success: true, token, trusted: true, message: 'Erfolgreich angemeldet (bekanntes Gerät)' }));
+            }
+
+            // Neues Gerät -> 2FA
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const targetDeviceId = deviceId || ('dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8));
+            const pending2FA = {
+              code,
+              deviceId: targetDeviceId,
+              deviceName: deviceName || 'Unbekanntes Gerät',
+              createdAt: new Date().toISOString(),
+              expiresAt: Date.now() + 15 * 60 * 1000,
+              attempts: 0,
+            };
+
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_2fa_pending`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(pending2FA)
+            }).catch(() => {});
+
+            if (resendKey) {
+              const now = new Date();
+              const dateFormatted = now.toLocaleDateString('de-DE', {
+                weekday: 'long',
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                timeZone: 'Europe/Berlin',
+              });
+
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${resendKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  from: 'Vollmers Hofladen <noreply@scholz-friese-webdesign.de>',
+                  to: [emailRecipient],
+                  subject: `🔐 Dein Sicherheitscode: ${code} • Vollmer’s Hofladen Admin`,
+                  html: `
+                    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 28px 24px; background-color: #FBF9F5; border-radius: 18px; border: 1px solid #E6E1D4;">
+                      <h2 style="color: #182019; margin: 0 0 10px 0; font-family: Georgia, serif;">Sicherheitscode für Admin-Login</h2>
+                      <p style="color: #444; font-size: 14px;">Anmeldung von einem neuen oder noch nicht gemerkten Gerät.</p>
+                      <div style="background-color: #FFFFFF; padding: 24px; border-radius: 14px; border: 1px solid #ECE7DD; text-align: center; margin: 20px 0;">
+                        <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; color: #777; display: block; margin-bottom: 8px;">Dein Einmal-Sicherheitscode:</span>
+                        <div style="font-family: monospace; font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #274B35; background: #F4F7F4; border: 1px solid #CFDFD3; border-radius: 10px; padding: 14px 20px; display: inline-block;">
+                          ${code}
+                        </div>
+                        <p style="font-size: 12px; color: #888; margin: 12px 0 0 0;">⏱️ Gültig für 15 Minuten</p>
+                      </div>
+                      <p style="font-size: 13px; color: #666;">Gerät: <strong>${deviceName || 'Unbekanntes Gerät'}</strong> am ${dateFormatted} Uhr.</p>
+                    </div>
+                  `
+                })
+              }).catch(() => {});
+            }
+
+            res.statusCode = 200;
+            return res.end(JSON.stringify({
+              success: true,
+              requires2FA: true,
+              deviceId: targetDeviceId,
+              emailMasked: emailRecipient.replace(/^(.)(.*)(@.*)$/, (_, f, m, e) => f + '***' + e),
+              message: 'Sicherheitscode wurde per E-Mail versendet.'
+            }));
+          }
+
+          // -------------------------------------------------------------
+          // 2b. POST /api/admin/verify-2fa
+          // -------------------------------------------------------------
+          if (pathname === '/api/admin/verify-2fa' && req.method === 'POST') {
+            const { deviceId, code, trustDevice, deviceName } = await parseJsonBody();
+            let pendingData = null;
+            try {
+              const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_2fa_pending`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvRes.ok) pendingData = await kvRes.json();
+            } catch (e) {}
+
+            if (!pendingData || typeof pendingData !== 'object') {
+              res.statusCode = 400;
+              return res.end(JSON.stringify({ success: false, error: 'Kein offener Sicherheitscode vorhanden.' }));
+            }
+
+            if (Date.now() > (pendingData.expiresAt || 0)) {
+              res.statusCode = 400;
+              return res.end(JSON.stringify({ success: false, error: 'Der Sicherheitscode ist abgelaufen.' }));
+            }
+
+            const cleanEntered = String(code || '').trim().replace(/\s+/g, '');
+            const cleanExpected = String(pendingData.code || '').trim();
+
+            if (cleanEntered !== cleanExpected) {
+              res.statusCode = 400;
+              return res.end(JSON.stringify({ success: false, error: 'Ungültiger Sicherheitscode.' }));
+            }
+
+            // Lösche pending
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_2fa_pending`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${apiToken}` }
+            }).catch(() => {});
+
+            if (trustDevice !== false && deviceId) {
+              let trustedList = [];
+              try {
+                const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+                  headers: { 'Authorization': `Bearer ${apiToken}` }
+                });
+                if (kvRes.ok) trustedList = await kvRes.json();
+              } catch (e) {}
+
+              const idx = trustedList.findIndex(d => d.id === deviceId);
+              const nowIso = new Date().toISOString();
+              const entry = { id: deviceId, name: deviceName || pendingData.deviceName || 'Gerät', addedAt: nowIso, lastUsed: nowIso };
+              if (idx >= 0) trustedList[idx] = entry;
+              else trustedList.push(entry);
+
+              await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+                method: 'PUT',
+                headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify(trustedList)
+              }).catch(() => {});
+            }
+
+            const token = 'vollmer_session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, token, trusted: trustDevice !== false, message: 'Code erfolgreich bestätigt!' }));
+          }
+
+          // -------------------------------------------------------------
+          // 2c. POST /api/admin/resend-2fa
+          // -------------------------------------------------------------
+          if (pathname === '/api/admin/resend-2fa' && req.method === 'POST') {
+            const { deviceId, deviceName } = await parseJsonBody();
+            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const targetDeviceId = deviceId || ('dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8));
+
+            const pending2FA = {
+              code,
+              deviceId: targetDeviceId,
+              deviceName: deviceName || 'Unbekanntes Gerät',
+              createdAt: new Date().toISOString(),
+              expiresAt: Date.now() + 15 * 60 * 1000,
+              attempts: 0,
+            };
+
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_2fa_pending`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(pending2FA)
+            }).catch(() => {});
+
+            if (resendKey) {
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from: 'Vollmers Hofladen <noreply@scholz-friese-webdesign.de>',
+                  to: [emailRecipient],
+                  subject: `🔐 Dein Sicherheitscode: ${code} • Vollmer’s Hofladen Admin`,
+                  html: `<p>Dein neuer Sicherheitscode: <strong>${code}</strong> (15 Minuten gültig)</p>`
+                })
+              }).catch(() => {});
+            }
+
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, message: 'Neuer Sicherheitscode versendet.' }));
+          }
+
+          // -------------------------------------------------------------
+          // 2d. GET & POST /api/admin/trusted-devices & remove-device
+          // -------------------------------------------------------------
+          if (pathname === '/api/admin/trusted-devices' && req.method === 'GET') {
+            let trustedList = [];
+            try {
+              const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvRes.ok) trustedList = await kvRes.json();
+            } catch (e) {}
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, devices: Array.isArray(trustedList) ? trustedList : [] }));
+          }
+
+          if (pathname === '/api/admin/remove-device' && req.method === 'POST') {
+            const { deviceId } = await parseJsonBody();
+            let trustedList = [];
+            try {
+              const kvRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvRes.ok) trustedList = await kvRes.json();
+            } catch (e) {}
+            trustedList = (Array.isArray(trustedList) ? trustedList : []).filter(d => d.id !== deviceId);
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/admin_trusted_devices`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(trustedList)
+            }).catch(() => {});
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, devices: trustedList, message: 'Gerät entfernt' }));
           }
 
           // -------------------------------------------------------------
@@ -240,9 +467,7 @@ export function apiPlugin() {
                 }
 
                 const origin = 'https://vollmers-hofladen.friese-scholz.workers.dev';
-                const acceptUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=accept&token=${actionToken}`;
-                const rejectUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=reject&token=${actionToken}`;
-                const adminLink = `${origin}/#admin`;
+                const adminLink = `${origin}/#admin?tab=eier-donnerstag`;
 
                 const htmlContent = `
                   <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
@@ -283,31 +508,20 @@ export function apiPlugin() {
 
                     ${newOrder.message ? `
                       <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
-                        <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Ablagehinweis / Nachricht:</strong>
+                        <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Nachricht / Hinweis:</strong>
                         <p style="color: #111; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">${newOrder.message}</p>
                       </div>
                     ` : ''}
 
-                    <div style="background-color: #FFFFFF; padding: 24px 20px; border-radius: 12px; border: 1px solid #ECE7DD; text-align: center; margin-bottom: 24px;">
-                      <p style="font-size: 14px; font-weight: 700; color: #182019; margin: 0 0 16px 0;">
-                        Möchtest du diese Lieferanfrage annehmen oder ablehnen?
+                    <div style="background-color: #FFFFFF; padding: 26px 20px; border-radius: 14px; border: 1px solid #ECE7DD; text-align: center; margin-bottom: 24px;">
+                      <p style="font-size: 15px; font-weight: 700; color: #182019; margin: 0 0 8px 0;">
+                        Lieferanfrage bearbeiten & entscheiden
                       </p>
-                      <div style="margin: 0 auto; text-align: center;">
-                        <a href="${acceptUrl}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
-                          ✅ Anfrage annehmen
-                        </a>
-                        <a href="${rejectUrl}" style="display: inline-block; background-color: #DC2626; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
-                          ❌ Anfrage ablehnen
-                        </a>
-                      </div>
-                      <p style="color: #888; font-size: 11px; margin: 12px 0 0 0;">
-                        Ein Klick öffnet die Bestätigung und versendet automatisch die passende Kunden-E-Mail.
+                      <p style="font-size: 13px; color: #666; margin: 0 0 18px 0; line-height: 1.5;">
+                        Öffne direkt das Admin-Dashboard, um die Anfrage mit einem Klick anzunehmen oder abzulehnen. Der Kunde erhält dabei automatisch die passende Benachrichtigung.
                       </p>
-                    </div>
-
-                    <div style="text-align: center; margin: 16px 0;">
-                      <a href="${adminLink}" style="color: #274B35; font-size: 13px; font-weight: 600; text-decoration: underline;">
-                        👉 Oder im Admin-Dashboard bearbeiten
+                      <a href="${adminLink}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; text-decoration: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                        👉 Im Admin-Dashboard öffnen & entscheiden
                       </a>
                     </div>
 

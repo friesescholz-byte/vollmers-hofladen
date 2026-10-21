@@ -26,22 +26,29 @@ const VALID_PAGES = [
 ];
 
 export default function App() {
+  const cleanHashPage = (rawHash) => {
+    const raw = (rawHash !== undefined ? rawHash : (typeof window !== 'undefined' ? window.location.hash : '')).replace(/^#/, '').trim();
+    if (!raw) return '';
+    const withoutQuery = raw.split('?')[0].split('&')[0];
+    return withoutQuery.replace(/^\/+|\/+$/g, '').toLowerCase();
+  };
+
   // Sync state with URL hash & path
   const getInitialPage = () => {
-    if (window.location.pathname === '/admin') {
+    if (typeof window !== 'undefined' && (window.location.pathname === '/admin' || window.location.pathname.startsWith('/admin/'))) {
       return 'admin';
     }
-    const hash = window.location.hash.replace('#', '').toLowerCase();
-    if (VALID_PAGES.includes(hash)) {
-      return hash;
+    const page = cleanHashPage();
+    if (VALID_PAGES.includes(page)) {
+      return page;
     }
     return 'home';
   };
 
   const getInitialLegal = () => {
-    const hash = window.location.hash.replace('#', '').toLowerCase();
-    if (['impressum', 'datenschutz', 'barrierefreiheit'].includes(hash)) {
-      return hash;
+    const page = cleanHashPage();
+    if (['impressum', 'datenschutz', 'barrierefreiheit'].includes(page)) {
+      return page;
     }
     return null;
   };
@@ -54,13 +61,13 @@ export default function App() {
   // Sync hash changes
   useEffect(() => {
     const handleHashChange = () => {
-      const hash = window.location.hash.replace('#', '').toLowerCase();
-      if (['impressum', 'datenschutz', 'barrierefreiheit'].includes(hash)) {
-        setLegalModalType(hash);
+      const page = cleanHashPage();
+      if (['impressum', 'datenschutz', 'barrierefreiheit'].includes(page)) {
+        setLegalModalType(page);
         return;
       }
-      if (VALID_PAGES.includes(hash)) {
-        setCurrentPage(hash);
+      if (VALID_PAGES.includes(page)) {
+        setCurrentPage(page);
       } else {
         setCurrentPage('home');
       }

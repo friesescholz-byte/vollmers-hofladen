@@ -132,6 +132,92 @@ async function sendCustomerDecisionEmail(env, order, decision) {
   }
 }
 
+async function send2FAEmail(env, { code, deviceName, recipient }) {
+  const resendKey = env.RESEND_API_KEY;
+  if (!resendKey) return;
+
+  const now = new Date();
+  const dateFormatted = now.toLocaleDateString('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Berlin',
+  });
+
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 580px; margin: 0 auto; padding: 28px 24px; background-color: #FBF9F5; border-radius: 18px; border: 1px solid #E6E1D4;">
+      <div style="border-bottom: 2px solid #274B35; padding-bottom: 16px; margin-bottom: 24px;">
+        <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #274B35; background-color: #E8EFEA; padding: 4px 10px; border-radius: 6px;">2-Faktor-Authentifizierung</span>
+        <h2 style="color: #182019; margin: 12px 0 6px 0; font-size: 24px; font-family: Georgia, serif;">Sicherheitscode für Admin-Login</h2>
+        <p style="color: #666; margin: 0; font-size: 14px;">Anmeldung von einem neuen oder noch nicht gemerkten Gerät.</p>
+      </div>
+
+      <p style="color: #222; font-size: 15px; line-height: 1.5; margin: 0 0 16px 0;">
+        Hallo Felix,<br />
+        es wurde ein Anmeldeversuch im <strong>Vollmer’s Hofladen Admin-Dashboard</strong> registriert. Nutze bitte folgenden 6-stelligen Code zur Bestätigung:
+      </p>
+
+      <div style="background-color: #FFFFFF; padding: 24px; border-radius: 14px; border: 1px solid #ECE7DD; text-align: center; margin: 20px 0;">
+        <span style="font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #777; display: block; margin-bottom: 10px;">Dein Einmal-Sicherheitscode:</span>
+        <div style="font-family: 'SF Mono', Monaco, Consolas, monospace; font-size: 38px; font-weight: 800; letter-spacing: 8px; color: #274B35; background: #F4F7F4; border: 1px solid #CFDFD3; border-radius: 10px; padding: 14px 20px; display: inline-block;">
+          ${code}
+        </div>
+        <p style="font-size: 12px; color: #888; margin: 14px 0 0 0;">
+          ⏱️ Dieser Code ist <strong>15 Minuten</strong> lang gültig.
+        </p>
+      </div>
+
+      <div style="background-color: #FFFFFF; padding: 18px 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 24px;">
+        <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #777; display: block; margin-bottom: 8px;">Geräte-Informationen:</span>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <tr>
+            <td style="padding: 5px 0; color: #777; width: 110px;">Gerät / Browser:</td>
+            <td style="padding: 5px 0; font-weight: 600; color: #222;">${deviceName || 'Unbekanntes Gerät'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; color: #777;">Zeitpunkt:</td>
+            <td style="padding: 5px 0; color: #555;">${dateFormatted} Uhr</td>
+          </tr>
+          <tr>
+            <td style="padding: 5px 0; color: #777;">Gerät merken:</td>
+            <td style="padding: 5px 0; color: #274B35; font-weight: 600;">Nach Bestätigung wird dieses Gerät gemerkt – künftige Logins erfolgen ohne Code!</td>
+          </tr>
+        </table>
+      </div>
+
+      <p style="color: #777; font-size: 12px; line-height: 1.5; margin: 0 0 20px 0;">
+        Falls du diesen Anmeldeversuch nicht selbst veranlasst hast, musst du nichts weiter tun. Ohne diesen Code ist kein Zugriff auf das Dashboard möglich.
+      </p>
+
+      <div style="text-align: center; font-size: 12px; color: #999; border-top: 1px solid #E6E1D4; padding-top: 16px;">
+        Vollmer’s Hofladen Machtsum • Sicherheitsverwaltung<br />
+        Bereitgestellt durch Scholz & Friese Webdesign
+      </div>
+    </div>
+  `;
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Vollmers Hofladen <noreply@scholz-friese-webdesign.de>',
+        to: [recipient],
+        subject: `🔐 Dein Sicherheitscode: ${code} • Vollmer’s Hofladen Admin`,
+        html,
+      }),
+    });
+  } catch (e) {
+    console.warn('Failed to send 2FA code email:', e);
+  }
+}
+
 function renderActionHtml({ title, isAccepted, order, origin }) {
   const dateText = formatThursdayText(order.deliveryDate);
   const adminUrl = `${origin}/#admin`;
@@ -374,18 +460,192 @@ export default {
         }
 
         // -------------------------------------------------------------
-        // 2. POST /api/admin/login -> Prüft Admin-Passwort
+        // 2. POST /api/admin/login -> Prüft Admin-Passwort & Geräte-Status
         // -------------------------------------------------------------
         if (url.pathname === '/api/admin/login' && request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const adminPw = env.ADMIN_PASSWORD || env.Passwort;
+          const { password, deviceId, deviceName } = body;
 
-          if (body.password && adminPw && body.password === adminPw) {
-            const token = 'vollmer_session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
-            return jsonResponse({ success: true, token, message: 'Erfolgreich angemeldet' });
+          if (!password || !adminPw || password !== adminPw) {
+            return jsonResponse({ success: false, error: 'Ungültiges Passwort' }, 401);
           }
 
-          return jsonResponse({ success: false, error: 'Ungültiges Passwort' }, 401);
+          // Passwort ist korrekt! Prüfe jetzt, ob das Gerät bereits gemerkt (vertrauenswürdig) ist
+          const { data: trustedData } = await readKV(env, 'admin_trusted_devices');
+          const trustedList = Array.isArray(trustedData) ? trustedData : [];
+
+          const existingDevice = deviceId ? trustedList.find(d => d.id === deviceId) : null;
+
+          if (existingDevice) {
+            // Bekanntes Gerät -> Sofort ohne 2FA anmelden!
+            existingDevice.lastUsed = new Date().toISOString();
+            if (deviceName && (!existingDevice.name || existingDevice.name === 'Unbekanntes Gerät')) {
+              existingDevice.name = deviceName;
+            }
+            await writeKV(env, 'admin_trusted_devices', trustedList);
+
+            const token = 'vollmer_session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+            return jsonResponse({
+              success: true,
+              token,
+              trusted: true,
+              message: 'Erfolgreich angemeldet (bekanntes Gerät)',
+            });
+          }
+
+          // Neues oder noch nicht gemerktes Gerät -> 2FA-Code per E-Mail anfordern
+          const code = Math.floor(100000 + Math.random() * 900000).toString();
+          const targetDeviceId = deviceId || ('dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8));
+          const recipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+
+          const pending2FA = {
+            code,
+            deviceId: targetDeviceId,
+            deviceName: deviceName || 'Unbekanntes Gerät',
+            createdAt: new Date().toISOString(),
+            expiresAt: Date.now() + 15 * 60 * 1000,
+            attempts: 0,
+          };
+          await writeKV(env, 'admin_2fa_pending', pending2FA);
+
+          // E-Mail mit 2FA Code versenden
+          await send2FAEmail(env, {
+            code,
+            deviceName,
+            recipient,
+          });
+
+          return jsonResponse({
+            success: true,
+            requires2FA: true,
+            deviceId: targetDeviceId,
+            emailMasked: recipient.replace(/^(.)(.*)(@.*)$/, (_, f, m, e) => f + '***' + e),
+            message: 'Sicherheitscode wurde per E-Mail versendet.',
+          });
+        }
+
+        // -------------------------------------------------------------
+        // 2b. POST /api/admin/verify-2fa -> Prüft 2FA-Code und merkt Gerät
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/admin/verify-2fa' && request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const { deviceId, code, trustDevice, deviceName } = body;
+
+          const { data: pendingData } = await readKV(env, 'admin_2fa_pending');
+          if (!pendingData || typeof pendingData !== 'object') {
+            return jsonResponse({ success: false, error: 'Kein offener Sicherheitscode vorhanden. Bitte melde dich erneut an.' }, 400);
+          }
+
+          if (Date.now() > (pendingData.expiresAt || 0)) {
+            return jsonResponse({ success: false, error: 'Der Sicherheitscode ist abgelaufen. Bitte fordere einen neuen an.' }, 400);
+          }
+
+          if (pendingData.deviceId && deviceId && pendingData.deviceId !== deviceId) {
+            return jsonResponse({ success: false, error: 'Geräte-ID stimmt nicht überein.' }, 400);
+          }
+
+          const cleanEntered = String(code || '').trim().replace(/\s+/g, '');
+          const cleanExpected = String(pendingData.code || '').trim();
+
+          if (cleanEntered !== cleanExpected) {
+            pendingData.attempts = (pendingData.attempts || 0) + 1;
+            if (pendingData.attempts >= 5) {
+              await writeKV(env, 'admin_2fa_pending', null);
+              return jsonResponse({ success: false, error: 'Zu viele Fehlversuche. Bitte fordere einen neuen Code an.' }, 400);
+            }
+            await writeKV(env, 'admin_2fa_pending', pendingData);
+            return jsonResponse({ success: false, error: 'Ungültiger Sicherheitscode. Bitte prüfe deine Eingabe.' }, 400);
+          }
+
+          // Code ist korrekt! Lösche Pending-Eintrag
+          await writeKV(env, 'admin_2fa_pending', null);
+
+          // Gerät dauerhaft merken
+          if (trustDevice !== false && deviceId) {
+            const { data: trustedData } = await readKV(env, 'admin_trusted_devices');
+            const trustedList = Array.isArray(trustedData) ? trustedData : [];
+            const idx = trustedList.findIndex(d => d.id === deviceId);
+            const nowIso = new Date().toISOString();
+            const deviceEntry = {
+              id: deviceId,
+              name: deviceName || pendingData.deviceName || 'Mobiles / Desktop-Gerät',
+              addedAt: nowIso,
+              lastUsed: nowIso,
+            };
+            if (idx >= 0) {
+              trustedList[idx] = deviceEntry;
+            } else {
+              trustedList.push(deviceEntry);
+            }
+            await writeKV(env, 'admin_trusted_devices', trustedList);
+          }
+
+          const token = 'vollmer_session_' + Date.now() + '_' + Math.random().toString(36).substring(2);
+          return jsonResponse({
+            success: true,
+            token,
+            trusted: trustDevice !== false,
+            message: 'Code erfolgreich bestätigt!',
+          });
+        }
+
+        // -------------------------------------------------------------
+        // 2c. POST /api/admin/resend-2fa -> Neuen 2FA-Code anfordern
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/admin/resend-2fa' && request.method === 'POST') {
+          const body = await request.json().catch(() => ({}));
+          const { deviceId, deviceName } = body;
+
+          const code = Math.floor(100000 + Math.random() * 900000).toString();
+          const targetDeviceId = deviceId || ('dev_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 8));
+          const recipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
+
+          const pending2FA = {
+            code,
+            deviceId: targetDeviceId,
+            deviceName: deviceName || 'Unbekanntes Gerät',
+            createdAt: new Date().toISOString(),
+            expiresAt: Date.now() + 15 * 60 * 1000,
+            attempts: 0,
+          };
+          await writeKV(env, 'admin_2fa_pending', pending2FA);
+
+          await send2FAEmail(env, {
+            code,
+            deviceName,
+            recipient,
+          });
+
+          return jsonResponse({
+            success: true,
+            message: 'Neuer Sicherheitscode wurde versendet.',
+          });
+        }
+
+        // -------------------------------------------------------------
+        // 2d. GET & POST /api/admin/trusted-devices & remove-device
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/admin/trusted-devices' && request.method === 'GET') {
+          const authHeader = request.headers.get('authorization') || '';
+          if (!authHeader.includes('vollmer_session_')) {
+            return jsonResponse({ success: false, error: 'Nicht autorisiert' }, 401);
+          }
+          const { data: trustedData } = await readKV(env, 'admin_trusted_devices');
+          return jsonResponse({ success: true, devices: Array.isArray(trustedData) ? trustedData : [] });
+        }
+
+        if (url.pathname === '/api/admin/remove-device' && request.method === 'POST') {
+          const authHeader = request.headers.get('authorization') || '';
+          if (!authHeader.includes('vollmer_session_')) {
+            return jsonResponse({ success: false, error: 'Nicht autorisiert' }, 401);
+          }
+          const body = await request.json().catch(() => ({}));
+          const { deviceId } = body;
+          const { data: trustedData } = await readKV(env, 'admin_trusted_devices');
+          const trustedList = (Array.isArray(trustedData) ? trustedData : []).filter(d => d.id !== deviceId);
+          await writeKV(env, 'admin_trusted_devices', trustedList);
+          return jsonResponse({ success: true, devices: trustedList, message: 'Gerät entfernt' });
         }
 
         // -------------------------------------------------------------
@@ -489,10 +749,7 @@ export default {
             try {
               const deliveryDateText = formatThursdayText(newOrder.deliveryDate);
               const permanentOrigin = 'https://vollmers-hofladen.friese-scholz.workers.dev';
-
-              const acceptUrl = `${permanentOrigin}/api/eier-donnerstag/action?id=${newOrder.id}&action=accept&token=${actionToken}`;
-              const rejectUrl = `${permanentOrigin}/api/eier-donnerstag/action?id=${newOrder.id}&action=reject&token=${actionToken}`;
-              const adminLink = `${permanentOrigin}/#admin`;
+              const adminLink = `${permanentOrigin}/#admin?tab=eier-donnerstag`;
 
               const htmlContent = `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
@@ -538,27 +795,16 @@ export default {
                     </div>
                   ` : ''}
 
-                  <!-- 2 Aktions-Buttons: Annehmen / Ablehnen -->
-                  <div style="background-color: #FFFFFF; padding: 24px 20px; border-radius: 12px; border: 1px solid #ECE7DD; text-align: center; margin-bottom: 24px;">
-                    <p style="font-size: 14px; font-weight: 700; color: #182019; margin: 0 0 16px 0;">
-                      Möchtest du diese Lieferanfrage annehmen oder ablehnen?
+                  <!-- Direkter Button zum Admin Dashboard -->
+                  <div style="background-color: #FFFFFF; padding: 26px 20px; border-radius: 14px; border: 1px solid #ECE7DD; text-align: center; margin-bottom: 24px;">
+                    <p style="font-size: 15px; font-weight: 700; color: #182019; margin: 0 0 8px 0;">
+                      Lieferanfrage bearbeiten & entscheiden
                     </p>
-                    <div style="margin: 0 auto; text-align: center;">
-                      <a href="${acceptUrl}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
-                        ✅ Anfrage annehmen
-                      </a>
-                      <a href="${rejectUrl}" style="display: inline-block; background-color: #DC2626; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
-                        ❌ Anfrage ablehnen
-                      </a>
-                    </div>
-                    <p style="color: #888; font-size: 11px; margin: 12px 0 0 0;">
-                      Ein Klick öffnet die Bestätigung und versendet automatisch die passende Kunden-E-Mail.
+                    <p style="font-size: 13px; color: #666; margin: 0 0 18px 0; line-height: 1.5;">
+                      Öffne direkt das Admin-Dashboard, um die Anfrage mit einem Klick anzunehmen oder abzulehnen. Der Kunde erhält dabei automatisch die passende Benachrichtigung.
                     </p>
-                  </div>
-
-                  <div style="text-align: center; margin: 16px 0;">
-                    <a href="${adminLink}" style="color: #274B35; font-size: 13px; font-weight: 600; text-decoration: underline;">
-                      👉 Oder im Admin-Dashboard bearbeiten
+                    <a href="${adminLink}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 700; font-size: 15px; padding: 14px 28px; border-radius: 12px; text-decoration: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                      👉 Im Admin-Dashboard öffnen & entscheiden
                     </a>
                   </div>
 

@@ -109,7 +109,7 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
                 </div>
                 <div className="flex flex-col">
                   <div className="flex items-center gap-1 sm:gap-1.5">
-                    <span className="text-xs sm:text-sm">Machtsumer Eier-Donnerstag</span>
+                    <span className="text-xs sm:text-sm">Eier-Donnerstag</span>
                     <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-forest group-hover:translate-x-0.5 transition-transform" />
                   </div>
                   <span className="hidden sm:block text-[11px] font-normal text-ink-muted">
