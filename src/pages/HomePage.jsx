@@ -1,9 +1,10 @@
 import React, { useRef } from 'react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
-import { ArrowRight, Clock, ShieldCheck, Heart, MapPin, Sparkles, ShoppingBag, ExternalLink, ChevronRight, Star, Egg } from 'lucide-react';
+import { ArrowRight, Clock, ShieldCheck, Heart, MapPin, Sparkles, ShoppingBag, ExternalLink, ChevronRight, Star } from 'lucide-react';
 import { MEDIA } from '../data/media';
 import BeholdInstagramFeed from '../components/BeholdInstagramFeed';
 import HofladenHeroButton from '../components/HofladenHeroButton';
+import EggIcon from '../components/EggIcon';
 import { useProducts } from '../context/ProductContext';
 
 export default function HomePage({ onNavigate, onSelectProduct }) {
@@ -104,7 +105,7 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
                 className="w-full sm:w-auto flex items-center justify-between sm:justify-start gap-3.5 px-5 sm:px-6 py-3.5 h-[64px] sm:h-[68px] rounded-2xl bg-canvas-card border border-ink-border text-ink font-semibold text-sm hover:bg-canvas-muted hover:border-forest/50 transition-all shadow-subtle hover:shadow-elevated group text-left"
               >
                 <div className="w-9 h-9 rounded-full bg-forest-tint border border-forest-border flex items-center justify-center text-forest group-hover:scale-110 transition-transform shrink-0">
-                  <Egg className="w-4 h-4 stroke-[1.75]" />
+                  <EggIcon className="w-4 h-4" />
                 </div>
                 <div className="flex flex-col flex-1">
                   <div className="flex items-center gap-1.5">

@@ -179,7 +179,7 @@ export function apiPlugin() {
           // 3c. Eier-Donnerstag Endpunkte
           // -------------------------------------------------------------
           if (pathname === '/api/eier-donnerstag' && req.method === 'POST') {
-            const { name, email, address, eggCount, message } = await parseJsonBody();
+            const { name, email, address, eggCount, deliveryDate, message } = await parseJsonBody();
             if (!name || !email || !address || !eggCount) {
               res.statusCode = 400;
               return res.end(JSON.stringify({ success: false, error: 'Bitte fülle alle Pflichtfelder aus.' }));
@@ -199,6 +199,7 @@ export function apiPlugin() {
               email: String(email).trim(),
               address: String(address).trim(),
               eggCount: Number(eggCount) || String(eggCount).trim(),
+              deliveryDate: deliveryDate ? String(deliveryDate).trim() : '',
               message: message ? String(message).trim() : '',
               createdAt: new Date().toISOString(),
             };
@@ -209,6 +210,98 @@ export function apiPlugin() {
               headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
               body: JSON.stringify(updatedOrders)
             });
+
+            // E-Mail-Benachrichtigung an den Hofladen (Resend API)
+            if (resendKey) {
+              try {
+                let deliveryDateText = 'Nächster Donnerstag';
+                if (newOrder.deliveryDate) {
+                  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(newOrder.deliveryDate);
+                  if (match) {
+                    const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+                    const day = parseInt(match[3], 10);
+                    const monthName = months[parseInt(match[2], 10) - 1] || match[2];
+                    deliveryDateText = `Donnerstag, ${day}. ${monthName} ${match[1]}`;
+                  } else {
+                    deliveryDateText = newOrder.deliveryDate;
+                  }
+                }
+
+                const adminLink = 'https://vollmers-hofladen.friese-scholz.workers.dev/#admin';
+
+                const htmlContent = `
+                  <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
+                    <div style="border-bottom: 2px solid #274B35; padding-bottom: 16px; margin-bottom: 20px;">
+                      <h2 style="color: #274B35; margin: 0 0 6px 0; font-size: 24px;">🥚 Neue Eier-Donnerstag Bestellung!</h2>
+                      <p style="color: #666; margin: 0; font-size: 14px;">Ein Machtsumer Haushalt hat frische Freilandeier vorbestellt.</p>
+                    </div>
+                    <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
+                      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <tr>
+                          <td style="padding: 8px 0; color: #777; width: 140px;"><strong>Liefertermin:</strong></td>
+                          <td style="padding: 8px 0; color: #274B35; font-weight: 700; font-size: 15px;">${deliveryDateText}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #777;"><strong>Bestellmenge:</strong></td>
+                          <td style="padding: 8px 0; color: #111; font-weight: 700; font-size: 15px;">🥚 ${newOrder.eggCount} frische Freilandeier</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #777;"><strong>Name:</strong></td>
+                          <td style="padding: 8px 0; color: #111; font-weight: 600;">${newOrder.name}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #777;"><strong>Adresse (Machtsum):</strong></td>
+                          <td style="padding: 8px 0; color: #111; font-weight: 600;">${newOrder.address}</td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #777;"><strong>E-Mail:</strong></td>
+                          <td style="padding: 8px 0;"><a href="mailto:${newOrder.email}" style="color: #274B35; text-decoration: underline;">${newOrder.email}</a></td>
+                        </tr>
+                        <tr>
+                          <td style="padding: 8px 0; color: #777;"><strong>Abrechnung:</strong></td>
+                          <td style="padding: 8px 0; color: #555;">Barzahlung an der Haustür bei Lieferung</td>
+                        </tr>
+                      </table>
+                    </div>
+                    ${newOrder.message ? `
+                      <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
+                        <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Ablagehinweis / Nachricht:</strong>
+                        <p style="color: #111; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">${newOrder.message}</p>
+                      </div>
+                    ` : ''}
+                    <div style="text-align: center; margin: 28px 0 24px 0;">
+                      <a href="${adminLink}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 10px; text-decoration: none;">
+                        👉 Zum Admin-Dashboard (Eier-Donnerstag Liste öffnen)
+                      </a>
+                      <p style="color: #888; font-size: 11px; margin-top: 8px;">
+                        Direktlink: <a href="${adminLink}" style="color: #274B35;">${adminLink}</a>
+                      </p>
+                    </div>
+                    <div style="text-align: center; font-size: 12px; color: #999; border-top: 1px solid #E6E1D4; padding-top: 16px;">
+                      Automatisches Liefersystem • Vollmer’s Hofladen Machtsum<br />
+                      Bereitgestellt durch Scholz & Friese Webdesign
+                    </div>
+                  </div>
+                `;
+
+                await fetch('https://api.resend.com/emails', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${resendKey}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    from: 'Scholz & Friese Webdesign <noreply@scholz-friese-webdesign.de>',
+                    to: [emailRecipient],
+                    reply_to: newOrder.email,
+                    subject: `[Vollmers Hofladen] 🥚 Neue Eier-Donnerstag Bestellung: ${newOrder.eggCount} Eier von ${newOrder.name}`,
+                    html: htmlContent
+                  })
+                });
+              } catch (mailErr) {
+                console.warn('Resend mail error in dev plugin:', mailErr);
+              }
+            }
 
             res.statusCode = 200;
             return res.end(JSON.stringify({ success: true, order: newOrder }));

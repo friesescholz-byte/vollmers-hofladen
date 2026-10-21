@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ShoppingBag, Menu, X, Clock, MapPin, Phone, ChevronRight, ChevronDown, Egg, Calendar } from 'lucide-react';
+import { ShoppingBag, Menu, X, Clock, ChevronRight, ChevronDown } from 'lucide-react';
+import EggIcon from './EggIcon';
 import { MEDIA } from '../data/media';
 
 export default function Header({ currentPage, onNavigate }) {
@@ -97,7 +98,7 @@ export default function Header({ currentPage, onNavigate }) {
               onClick={() => handleNavClick('eier-donnerstag')}
               className={getBtnClass(currentPage === 'eier-donnerstag')}
             >
-              <Egg className="w-4 h-4 text-forest stroke-[1.75] shrink-0" />
+              <EggIcon className="w-4 h-4 text-forest shrink-0" />
               <span>Eier-Donnerstag</span>
             </button>
 
@@ -255,7 +256,7 @@ export default function Header({ currentPage, onNavigate }) {
                 }`}
               >
                 <span className="flex items-center gap-2">
-                  <Egg className={`w-4 h-4 ${currentPage === 'eier-donnerstag' ? 'text-emerald-300' : 'text-forest'}`} />
+                  <EggIcon className={`w-4 h-4 ${currentPage === 'eier-donnerstag' ? 'text-emerald-300' : 'text-forest'}`} />
                   <span>Eier-Donnerstag</span>
                 </span>
                 <ChevronRight className="w-4 h-4 opacity-60" />
@@ -337,25 +338,6 @@ export default function Header({ currentPage, onNavigate }) {
                   <ShoppingBag className="w-4 h-4" />
                   <span>Online-Shop & Vorbestellung</span>
                 </a>
-
-                <div className="grid grid-cols-2 gap-2 pt-1">
-                  <a
-                    href="tel:017621006452"
-                    className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-white border border-ink-border text-ink text-xs font-semibold hover:bg-canvas-muted shadow-subtle"
-                  >
-                    <Phone className="w-4 h-4 text-forest" />
-                    <span>Anrufen</span>
-                  </a>
-                  <a
-                    href="https://www.google.com/maps/dir/?api=1&destination=Lindenallee+24+31177+Harsum"
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="flex items-center justify-center gap-2 py-3 px-3 rounded-2xl bg-white border border-ink-border text-ink text-xs font-semibold hover:bg-canvas-muted shadow-subtle"
-                  >
-                    <MapPin className="w-4 h-4 text-forest" />
-                    <span>Route (Maps)</span>
-                  </a>
-                </div>
 
                 <div className="p-3.5 rounded-2xl bg-white border border-ink-border text-xs text-ink-muted flex items-center gap-2.5 shadow-subtle">
                   <Clock className="w-4 h-4 text-forest shrink-0" />

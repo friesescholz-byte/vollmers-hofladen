@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import {
   ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, CheckCircle2,
   XCircle, Upload, AlertCircle, ArrowLeft, Loader2,
-  Search, Image as ImageIcon, Save, RefreshCw, Egg, Calendar, MapPin, Clock, Mail, MessageSquare, Package
+  Search, Image as ImageIcon, Save, RefreshCw, Calendar, MapPin, Clock, Mail, Package
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { CATEGORIES } from '../data/products';
 import { PLACEHOLDER_EVENT_IMAGE } from '../data/events';
+import EggIcon from '../components/EggIcon';
+import ThursdayMiniCalendar, { getNextThursdayISO, formatThursdayDE } from '../components/ThursdayMiniCalendar';
+import { formatEventDateDisplay } from './EventsPage';
 
 // SHA-256 Hash für das Weymann-Architektur-Sicherheitsprinzip (Passwort: Vollmer2026!Admin)
 const ADMIN_HASH = "c2f10cc1feec3662f28e52e0d7558b49bbb8403f4e86e81b58bdc3a99d77be70";
@@ -70,6 +73,7 @@ export default function AdminPage({ onNavigate }) {
     address: '',
     email: '',
     eggCount: 10,
+    deliveryDate: getNextThursdayISO(),
     message: '',
   });
 
@@ -80,6 +84,7 @@ export default function AdminPage({ onNavigate }) {
     id: '',
     title: '',
     date: '',
+    endDate: '',
     time: '',
     location: '',
     badge: 'Unser Marktstand vor Ort',
@@ -414,6 +419,7 @@ export default function AdminPage({ onNavigate }) {
       address: '',
       email: '',
       eggCount: 10,
+      deliveryDate: getNextThursdayISO(),
       message: '',
     });
   };
@@ -427,6 +433,7 @@ export default function AdminPage({ onNavigate }) {
       address: order.address || '',
       email: order.email || '',
       eggCount: order.eggCount || 10,
+      deliveryDate: order.deliveryDate || getNextThursdayISO(),
       message: order.message || '',
     });
   };
@@ -449,6 +456,7 @@ export default function AdminPage({ onNavigate }) {
       address: cleanAddress,
       email: eggForm.email.trim(),
       eggCount: Number(eggForm.eggCount) || eggForm.eggCount,
+      deliveryDate: eggForm.deliveryDate ? String(eggForm.deliveryDate).trim() : getNextThursdayISO(),
       message: eggForm.message.trim(),
       createdAt: editingEggOrder?.createdAt || new Date().toISOString(),
     };
@@ -490,6 +498,7 @@ export default function AdminPage({ onNavigate }) {
       id: newId,
       title: '',
       date: '2026-12-13',
+      endDate: '',
       time: 'Ab 14:00 Uhr',
       location: '',
       badge: 'Unser Marktstand vor Ort',
@@ -505,6 +514,7 @@ export default function AdminPage({ onNavigate }) {
       id: ev.id,
       title: ev.title || '',
       date: ev.date || '',
+      endDate: ev.endDate || '',
       time: ev.time || '',
       location: ev.location || '',
       badge: ev.badge || '',
@@ -525,6 +535,7 @@ export default function AdminPage({ onNavigate }) {
       ...eventForm,
       title: eventForm.title.trim(),
       date: eventForm.date.trim(),
+      endDate: eventForm.endDate ? eventForm.endDate.trim() : '',
       time: eventForm.time.trim(),
       location: eventForm.location.trim(),
       badge: eventForm.badge.trim(),
@@ -728,7 +739,7 @@ export default function AdminPage({ onNavigate }) {
                   : 'text-ink-muted hover:text-ink hover:bg-canvas'
               }`}
             >
-              <Egg className="w-4 h-4" />
+              <EggIcon className="w-4 h-4" />
               <span>Eier-Donnerstag ({eggOrders.length})</span>
             </button>
 
@@ -749,7 +760,7 @@ export default function AdminPage({ onNavigate }) {
           {activeTab === 'sortiment' && (
             <button
               onClick={openCreateModal}
-              className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center gap-2"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2"
             >
               <Plus className="w-4 h-4" />
               <span>Neues Produkt anlegen</span>
@@ -759,7 +770,7 @@ export default function AdminPage({ onNavigate }) {
           {activeTab === 'eier-donnerstag' && (
             <button
               onClick={openCreateEggOrder}
-              className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center gap-2"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2"
             >
               <Plus className="w-4 h-4" />
               <span>Eintrag für Eier-Donnerstag hinzufügen</span>
@@ -769,7 +780,7 @@ export default function AdminPage({ onNavigate }) {
           {activeTab === 'termine' && (
             <button
               onClick={openCreateEvent}
-              className="px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center gap-2"
+              className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-forest text-white text-xs font-semibold hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2"
             >
               <Plus className="w-4 h-4" />
               <span>Neuen Markt / Termin eintragen</span>
@@ -995,7 +1006,7 @@ export default function AdminPage({ onNavigate }) {
                     Teilnehmerliste Eier-Donnerstag
                   </h2>
                   <p className="text-xs text-ink-muted">
-                    Alle eingetragenen Lieferadressen in Machtsum mit Eieranzahl, E-Mail und Nachricht
+                    Alle eingetragenen Lieferadressen in Machtsum mit gewähltem Donnerstag, Eieranzahl, E-Mail und Nachricht
                   </p>
                 </div>
               </div>
@@ -1007,7 +1018,7 @@ export default function AdminPage({ onNavigate }) {
                 </div>
               ) : eggOrders.length === 0 ? (
                 <div className="p-10 text-center space-y-3">
-                  <Egg className="w-8 h-8 text-forest mx-auto stroke-[1.5]" />
+                  <EggIcon className="w-8 h-8 text-forest mx-auto" />
                   <p className="text-sm text-ink-muted">
                     Noch keine Anmeldungen für den Eier-Donnerstag vorhanden.
                   </p>
@@ -1024,9 +1035,10 @@ export default function AdminPage({ onNavigate }) {
                   {/* Tabellenkopf (Desktop) */}
                   <div className="hidden lg:grid lg:grid-cols-12 gap-4 px-6 py-3 bg-canvas-muted text-[11px] font-bold uppercase tracking-wider text-ink-muted">
                     <div className="col-span-3">Name & E-Mail</div>
-                    <div className="col-span-3">Adresse (Machtsum)</div>
+                    <div className="col-span-2">Adresse (Machtsum)</div>
+                    <div className="col-span-2">Liefer-Donnerstag</div>
                     <div className="col-span-2">Anzahl Eier</div>
-                    <div className="col-span-3">Nachricht / Hinweis</div>
+                    <div className="col-span-2">Nachricht</div>
                     <div className="col-span-1 text-right">Aktion</div>
                   </div>
 
@@ -1052,21 +1064,31 @@ export default function AdminPage({ onNavigate }) {
                       </div>
 
                       {/* Adresse */}
-                      <div className="lg:col-span-3 flex items-center gap-1.5 text-ink font-medium">
+                      <div className="lg:col-span-2 flex items-center gap-1.5 text-ink font-medium min-w-0">
                         <MapPin className="w-3.5 h-3.5 text-forest shrink-0" />
                         <span className="truncate">{order.address}</span>
+                      </div>
+
+                      {/* Gewählter Donnerstag */}
+                      <div className="lg:col-span-2">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-ink-border text-ink font-semibold text-[11px]">
+                          <Calendar className="w-3.5 h-3.5 text-forest shrink-0" />
+                          <span className="truncate">
+                            {order.deliveryDate ? formatThursdayDE(order.deliveryDate) : 'Nächster Do.'}
+                          </span>
+                        </span>
                       </div>
 
                       {/* Anzahl Eier */}
                       <div className="lg:col-span-2">
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-forest-tint border border-forest-border text-forest font-bold text-xs">
-                          <Egg className="w-3.5 h-3.5" />
+                          <EggIcon className="w-3.5 h-3.5" />
                           <span>{order.eggCount} Eier</span>
                         </span>
                       </div>
 
                       {/* Nachricht */}
-                      <div className="lg:col-span-3 text-ink-muted">
+                      <div className="lg:col-span-2 text-ink-muted">
                         {order.message ? (
                           <p className="line-clamp-2 leading-snug bg-canvas px-2.5 py-1.5 rounded-lg border border-ink-border/60">
                             {order.message}
@@ -1109,6 +1131,7 @@ export default function AdminPage({ onNavigate }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {events.map((ev) => {
                 const hasCustomImg = Boolean(ev.image && ev.image.trim());
+                const dateInfo = formatEventDateDisplay(ev.date, ev.endDate);
                 return (
                   <div
                     key={ev.id}
@@ -1145,7 +1168,7 @@ export default function AdminPage({ onNavigate }) {
                         <div className="flex flex-wrap items-center gap-3 text-xs font-semibold text-forest">
                           <span className="flex items-center gap-1">
                             <Calendar className="w-3.5 h-3.5" />
-                            <span>{ev.date}</span>
+                            <span>{dateInfo?.formattedFull || ev.date}</span>
                           </span>
                           {ev.time && (
                             <span className="flex items-center gap-1 text-ink-muted">
@@ -1409,7 +1432,7 @@ export default function AdminPage({ onNavigate }) {
             onClick={() => setEditingEggOrder(null)}
           >
             <div
-              className="w-full max-w-lg bg-canvas-card rounded-3xl shadow-2xl border border-ink-border overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
+              className="w-full max-w-lg bg-canvas-card rounded-3xl shadow-2xl border border-ink-border overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="px-5 py-4 border-b border-ink-border bg-canvas flex items-center justify-between">
@@ -1424,7 +1447,7 @@ export default function AdminPage({ onNavigate }) {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveEggOrder} className="p-5 sm:p-6 space-y-4 text-xs">
+              <form onSubmit={handleSaveEggOrder} className="p-5 sm:p-6 overflow-y-auto space-y-4 text-xs">
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                     Name *
@@ -1470,6 +1493,16 @@ export default function AdminPage({ onNavigate }) {
                 </div>
 
                 <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1.5">
+                    Gewünschter Liefer-Donnerstag *
+                  </label>
+                  <ThursdayMiniCalendar
+                    value={eggForm.deliveryDate}
+                    onChange={(dateStr) => setEggForm({ ...eggForm, deliveryDate: dateStr })}
+                  />
+                </div>
+
+                <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                     E-Mail-Adresse (optional)
                   </label>
@@ -1484,13 +1517,13 @@ export default function AdminPage({ onNavigate }) {
 
                 <div>
                   <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
-                    Nachricht / Ablagehinweis (optional)
+                    Deine Nachricht (optional)
                   </label>
                   <textarea
                     rows={2}
                     value={eggForm.message}
                     onChange={(e) => setEggForm({ ...eggForm, message: e.target.value })}
-                    placeholder="z.B. Vor die Haustür stellen..."
+                    placeholder="Schreibe uns eine Nachricht..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest resize-none"
                   />
                 </div>
@@ -1559,7 +1592,7 @@ export default function AdminPage({ onNavigate }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
-                      Datum *
+                      Datum (oder Startdatum) *
                     </label>
                     <input
                       type="date"
@@ -1570,6 +1603,32 @@ export default function AdminPage({ onNavigate }) {
                     />
                   </div>
 
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block font-semibold text-ink uppercase tracking-wider">
+                        Bis Datum (optional – für Zeiträume)
+                      </label>
+                      {eventForm.endDate && (
+                        <button
+                          type="button"
+                          onClick={() => setEventForm({ ...eventForm, endDate: '' })}
+                          className="text-[11px] font-semibold text-red-600 hover:underline"
+                        >
+                          Nur 1 Tag
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="date"
+                      min={eventForm.date || undefined}
+                      value={eventForm.endDate || ''}
+                      onChange={(e) => setEventForm({ ...eventForm, endDate: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                       Uhrzeit *
@@ -1583,9 +1642,7 @@ export default function AdminPage({ onNavigate }) {
                       className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
                     />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                       Ort / Standort *
@@ -1599,19 +1656,19 @@ export default function AdminPage({ onNavigate }) {
                       className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
                     />
                   </div>
+                </div>
 
-                  <div>
-                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
-                      Kleines Badge (optional)
-                    </label>
-                    <input
-                      type="text"
-                      value={eventForm.badge}
-                      onChange={(e) => setEventForm({ ...eventForm, badge: e.target.value })}
-                      placeholder="z.B. Unser Marktstand vor Ort"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
-                    />
-                  </div>
+                <div>
+                  <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                    Kleines Badge (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={eventForm.badge}
+                    onChange={(e) => setEventForm({ ...eventForm, badge: e.target.value })}
+                    placeholder="z.B. Unser Marktstand vor Ort"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                  />
                 </div>
 
                 {/* Bild oder Vollmer's Logo als Platzhalter */}
