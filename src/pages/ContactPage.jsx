@@ -409,8 +409,21 @@ export default function ContactPage() {
 
         </div>
 
-        {/* Verkaufsstelle & Google Maps Karte */}
-        <div className="mt-10 sm:mt-14 rounded-2xl sm:rounded-3xl bg-canvas-card border border-ink-border shadow-elevated overflow-hidden">
+        {/* Überschrift über der Karte: Verkaufsstellen & Partner in der Region / Unsere Standorte */}
+        <div className="mt-14 sm:mt-20 max-w-3xl mb-6 sm:mb-8">
+          <span className="text-xs font-semibold uppercase tracking-widest text-forest">
+            Verkaufsstellen & Partner in der Region
+          </span>
+          <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-ink mt-2">
+            Unsere Standorte
+          </h2>
+          <p className="text-ink-muted text-sm sm:text-base mt-3 leading-relaxed">
+            Unsere frischen Machtsumer Freilandeier und Erzeugnisse erhältst du an unserem eigenen 24/7 SB-Hofladen sowie an ausgewählten Verkaufsstellen regionaler Partner im Umkreis.
+          </p>
+        </div>
+
+        {/* Verkaufsstelle Hauptstandort Machtsum & Google Maps Karte */}
+        <div className="rounded-2xl sm:rounded-3xl bg-canvas-card border border-ink-border shadow-elevated overflow-hidden">
           {/* Karten-Kopfbereich */}
           <div className="p-5 sm:p-8 border-b border-ink-border flex flex-col md:flex-row md:items-center justify-between gap-4 bg-canvas-card">
             <div className="flex items-start sm:items-center gap-4">
@@ -419,11 +432,11 @@ export default function ContactPage() {
               </div>
               <div>
                 <span className="text-xs font-semibold uppercase tracking-widest text-forest block">
-                  Unsere Verkaufsstelle in Machtsum
+                  Hauptstandort • Eigenes Hofgelände (24/7)
                 </span>
-                <h2 className="font-serif text-2xl sm:text-3xl text-ink mt-0.5">
-                  Vollmer’s Hofladen • Lindenallee 24
-                </h2>
+                <h3 className="font-serif text-2xl sm:text-3xl text-ink mt-0.5">
+                  Vollmer’s SB-Hofladen • Lindenallee 24
+                </h3>
                 <p className="text-xs sm:text-sm text-ink-muted mt-1">
                   31177 Harsum (OT Machtsum) — Direkt an der Hofstelle mit kostenlosen Parkplätzen
                 </p>
@@ -437,7 +450,7 @@ export default function ContactPage() {
               className="px-5 py-3 rounded-xl bg-forest text-white hover:bg-forest-hover text-xs sm:text-sm font-semibold transition-colors shadow-subtle flex items-center justify-center gap-2 shrink-0"
             >
               <Navigation className="w-4 h-4" />
-              <span>Route zur Verkaufsstelle starten</span>
+              <span>Route zum Hauptladen starten</span>
               <ExternalLink className="w-3.5 h-3.5 opacity-80" />
             </a>
           </div>
@@ -462,7 +475,7 @@ export default function ContactPage() {
               />
               <div className="min-w-0">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-forest block">
-                  24/7 SB-Verkaufsstelle
+                  24/7 SB-Hofladen (Hauptstandort)
                 </span>
                 <strong className="text-sm font-serif text-ink block truncate">
                   Vollmer’s Hofladen
@@ -475,49 +488,34 @@ export default function ContactPage() {
           </div>
         </div>
 
-        {/* Alle Standorte & Partner-Verkaufsstellen im Detail */}
-        <div className="mt-14 sm:mt-20">
-          <div className="max-w-3xl mb-8 sm:mb-12">
+        {/* Partner-Verkaufsstellen in der Region */}
+        <div className="mt-12 sm:mt-16">
+          <div className="max-w-3xl mb-6 sm:mb-8">
             <span className="text-xs font-semibold uppercase tracking-widest text-forest">
-              Verkaufsstellen & Partner in der Region
+              Regionale Verkaufsstellen
             </span>
-            <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-ink mt-2">
-              Unsere Standorte
-            </h2>
-            <p className="text-ink-muted text-sm sm:text-base mt-3 leading-relaxed">
-              Unsere frischen Machtsumer Freilandeier und Erzeugnisse erhältst du an unserem eigenen 24/7 SB-Hofladen sowie an ausgewählten Verkaufsstellen regionaler Partner im Umkreis.
+            <h3 className="font-serif text-2xl sm:text-3xl text-ink mt-1">
+              Weitere Partner-Verkaufsstellen
+            </h3>
+            <p className="text-ink-muted text-xs sm:text-sm mt-1.5 leading-relaxed">
+              Hier erhältst du unsere frischen Machtsumer Freilandeier und Erzeugnisse ebenfalls vor Ort:
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
-            {LOCATIONS.map((loc) => {
-              const isMain = loc.isMain;
+            {LOCATIONS.filter((loc) => !loc.isMain).map((loc) => {
               return (
                 <div
                   key={loc.id}
-                  className={`rounded-2xl sm:rounded-3xl p-6 sm:p-8 border transition-all flex flex-col justify-between ${
-                    isMain
-                      ? 'bg-forest text-white border-forest shadow-elevated md:col-span-2'
-                      : 'bg-canvas-card text-ink border-ink-border shadow-subtle hover:border-forest/40'
-                  }`}
+                  className="rounded-2xl sm:rounded-3xl p-6 sm:p-8 border bg-canvas-card text-ink border-ink-border shadow-subtle hover:border-forest/40 transition-all flex flex-col justify-between"
                 >
                   <div className="space-y-4">
                     {/* Header: Badge & Status */}
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
-                          isMain
-                            ? 'bg-white/15 text-emerald-300 border border-white/20'
-                            : 'bg-forest-tint text-forest border border-forest-border'
-                        }`}
-                      >
+                      <span className="px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider bg-forest-tint text-forest border border-forest-border">
                         {loc.badge}
                       </span>
-                      <span
-                        className={`text-xs font-semibold flex items-center gap-1.5 ${
-                          isMain ? 'text-emerald-300' : 'text-forest'
-                        }`}
-                      >
+                      <span className="text-xs font-semibold flex items-center gap-1.5 text-forest">
                         <Clock className="w-3.5 h-3.5" />
                         <span>{loc.hoursBadge}</span>
                       </span>
@@ -525,45 +523,23 @@ export default function ContactPage() {
 
                     {/* Titel & Adresse */}
                     <div>
-                      <h3
-                        className={`font-serif text-2xl sm:text-3xl ${
-                          isMain ? 'text-white' : 'text-ink'
-                        }`}
-                      >
+                      <h4 className="font-serif text-2xl text-ink">
                         {loc.name}
-                      </h3>
-                      <div
-                        className={`flex items-start gap-2 mt-2 text-sm ${
-                          isMain ? 'text-white/80' : 'text-ink-muted'
-                        }`}
-                      >
-                        <MapPin
-                          className={`w-4 h-4 shrink-0 mt-0.5 ${
-                            isMain ? 'text-emerald-300' : 'text-forest'
-                          }`}
-                        />
+                      </h4>
+                      <div className="flex items-start gap-2 mt-2 text-sm text-ink-muted">
+                        <MapPin className="w-4 h-4 shrink-0 mt-0.5 text-forest" />
                         <span>{loc.addressFull}</span>
                       </div>
                     </div>
 
                     {/* Beschreibung */}
-                    <p
-                      className={`text-xs sm:text-sm leading-relaxed ${
-                        isMain ? 'text-white/85' : 'text-ink-muted'
-                      }`}
-                    >
+                    <p className="text-xs sm:text-sm leading-relaxed text-ink-muted">
                       {loc.description}
                     </p>
 
                     {/* Öffnungszeiten Details */}
                     {loc.schedule ? (
-                      <div
-                        className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
-                          isMain
-                            ? 'bg-white/10 border-white/15 text-white/90'
-                            : 'bg-canvas border-ink-border/70 text-ink'
-                        }`}
-                      >
+                      <div className="p-3.5 rounded-xl border text-xs space-y-1.5 bg-canvas border-ink-border/70 text-ink">
                         <strong className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint">
                           Reguläre Öffnungszeiten:
                         </strong>
@@ -577,15 +553,11 @@ export default function ContactPage() {
                         ))}
                       </div>
                     ) : (
-                      <div
-                        className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
-                          isMain
-                            ? 'bg-white/10 border-white/15 text-white/90'
-                            : 'bg-canvas border-ink-border/70 text-ink'
-                        }`}
-                      >
-                        <Clock className={`w-4 h-4 shrink-0 ${isMain ? 'text-emerald-300' : 'text-forest'}`} />
-                        <span><strong>Öffnungszeiten:</strong> {loc.hoursSummary}</span>
+                      <div className="p-3.5 rounded-xl border text-xs space-y-1 bg-canvas border-ink-border/70 text-ink">
+                        <strong className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                          Öffnungszeiten:
+                        </strong>
+                        <span className="font-semibold text-forest block">{loc.hoursSummary}</span>
                       </div>
                     )}
                   </div>
@@ -596,11 +568,7 @@ export default function ContactPage() {
                       href={loc.mapsUrl}
                       target="_blank"
                       rel="noreferrer noopener"
-                      className={`w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-subtle ${
-                        isMain
-                          ? 'bg-white text-forest hover:bg-emerald-50'
-                          : 'bg-forest text-white hover:bg-forest-hover'
-                      }`}
+                      className="w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 bg-forest text-white hover:bg-forest-hover shadow-subtle"
                     >
                       <Navigation className="w-4 h-4" />
                       <span>Route mit Google Maps planen</span>

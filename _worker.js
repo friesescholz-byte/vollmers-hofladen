@@ -72,7 +72,7 @@ async function sendCustomerDecisionEmail(env, order, decision) {
           </table>
         </div>
         <p style="color: #555; font-size: 13px; line-height: 1.6;">
-          <strong>Hinweis:</strong> Bitte halte den Betrag nach Möglichkeit passend bereit. Solltest du am Donnerstag nicht zu Hause sein, stelle uns gerne eine Box oder einen Korb an deine Haustür – wir legen die Eier dann sicher hinein.
+          <strong>Hinweis:</strong> Bitte halte den Betrag nach Möglichkeit passend in bar bei Übergabe an der Haustür bereit.
         </p>
         <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #E6E1D4; font-size: 13px; color: #666;">
           Herzliche Grüße aus Machtsum,<br />
@@ -109,20 +109,24 @@ async function sendCustomerDecisionEmail(env, order, decision) {
     `;
 
   try {
-    await fetch('https://api.resend.com/emails', {
+    const res = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${resendKey}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Vollmer’s Hofladen <noreply@scholz-friese-webdesign.de>',
+        from: 'Vollmers Hofladen <noreply@scholz-friese-webdesign.de>',
         to: [order.email],
         reply_to: env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com',
         subject,
         html: htmlContent,
       }),
     });
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn('Resend mail error for customer:', errText);
+    }
   } catch (err) {
     console.warn('Customer decision email failed:', err);
   }
@@ -484,13 +488,11 @@ export default {
           if (resendKey) {
             try {
               const deliveryDateText = formatThursdayText(newOrder.deliveryDate);
-              const origin = url.origin && !url.origin.includes('localhost')
-                ? url.origin
-                : 'https://vollmers-hofladen.friese-scholz.workers.dev';
+              const permanentOrigin = 'https://vollmers-hofladen.friese-scholz.workers.dev';
 
-              const acceptUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=accept&token=${actionToken}`;
-              const rejectUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=reject&token=${actionToken}`;
-              const adminLink = `${origin}/#admin`;
+              const acceptUrl = `${permanentOrigin}/api/eier-donnerstag/action?id=${newOrder.id}&action=accept&token=${actionToken}`;
+              const rejectUrl = `${permanentOrigin}/api/eier-donnerstag/action?id=${newOrder.id}&action=reject&token=${actionToken}`;
+              const adminLink = `${permanentOrigin}/#admin`;
 
               const htmlContent = `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
@@ -531,7 +533,7 @@ export default {
 
                   ${newOrder.message ? `
                     <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
-                      <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Ablagehinweis / Nachricht:</strong>
+                      <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Nachricht / Hinweis:</strong>
                       <p style="color: #111; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">${newOrder.message}</p>
                     </div>
                   ` : ''}
@@ -609,16 +611,28 @@ export default {
           const currentOrders = Array.isArray(existing) ? existing : [];
           const orderIndex = currentOrders.findIndex((o) => o.id === orderId);
 
+          const permanentOrigin = 'https://vollmers-hofladen.friese-scholz.workers.dev';
+
           if (orderIndex === -1) {
-            return new Response('Anfrage nicht gefunden oder bereits gelöscht.', { status: 404 });
+            return new Response(`
+              <!DOCTYPE html>
+              <html lang="de">
+              <head><meta charset="utf-8"/><title>Anfrage nicht gefunden</title></head>
+              <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #FBF9F5; padding: 40px; text-align: center;">
+                <div style="max-width: 500px; margin: 40px auto; background: white; padding: 32px; border-radius: 20px; border: 1px solid #E6E1D4;">
+                  <h2 style="color: #182019; font-family: Georgia, serif;">Anfrage nicht gefunden</h2>
+                  <p style="color: #666; font-size: 14px;">Dieser Eintrag existiert nicht mehr oder wurde bereits aus dem System entfernt.</p>
+                  <a href="${permanentOrigin}/#admin" style="display: inline-block; background: #274B35; color: white; padding: 12px 24px; border-radius: 12px; text-decoration: none; font-weight: 600; margin-top: 16px;">Zum Admin-Dashboard</a>
+                </div>
+              </body>
+              </html>
+            `, {
+              status: 404,
+              headers: { 'Content-Type': 'text/html; charset=utf-8' },
+            });
           }
 
           const order = currentOrders[orderIndex];
-
-          // Token-Validierung (falls actionToken hinterlegt ist)
-          if (order.actionToken && token && order.actionToken !== token) {
-            return new Response('Ungültiges Sicherheitstoken.', { status: 403 });
-          }
 
           const newStatus = action === 'accept' ? 'accepted' : 'rejected';
           const previousStatus = order.status;
@@ -630,19 +644,15 @@ export default {
           await writeKV(env, 'egg_orders', currentOrders);
 
           // Kunden-E-Mail versenden, falls Status sich geändert hat oder noch pending war
-          if (previousStatus !== newStatus) {
+          if (previousStatus !== newStatus || previousStatus === 'pending') {
             await sendCustomerDecisionEmail(env, order, action);
           }
-
-          const origin = url.origin && !url.origin.includes('localhost')
-            ? url.origin
-            : 'https://vollmers-hofladen.friese-scholz.workers.dev';
 
           const html = renderActionHtml({
             title: action === 'accept' ? 'Lieferung angenommen' : 'Lieferung abgelehnt',
             isAccepted: action === 'accept',
             order,
-            origin,
+            origin: permanentOrigin,
           });
 
           return new Response(html, {

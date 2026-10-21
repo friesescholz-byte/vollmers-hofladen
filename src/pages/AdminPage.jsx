@@ -148,6 +148,31 @@ export default function AdminPage({ onNavigate }) {
     }
   }, [sessionToken]);
 
+  // Live Auto-Sync: Wenn der Tab wieder aktiv wird (z. B. nach Klick in der E-Mail)
+  useEffect(() => {
+    if (!sessionToken) return;
+    const handleSync = () => {
+      if (document.visibilityState === 'visible') {
+        fetchEggOrders(sessionToken);
+      }
+    };
+    window.addEventListener('focus', handleSync);
+    document.addEventListener('visibilitychange', handleSync);
+    return () => {
+      window.removeEventListener('focus', handleSync);
+      document.removeEventListener('visibilitychange', handleSync);
+    };
+  }, [sessionToken]);
+
+  // Polling alle 6 Sekunden wenn Tab „Eier-Donnerstag“ geöffnet ist
+  useEffect(() => {
+    if (!sessionToken || activeTab !== 'eier-donnerstag') return;
+    const interval = setInterval(() => {
+      fetchEggOrders(sessionToken);
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [sessionToken, activeTab]);
+
   const saveEggOrders = async (updatedOrders) => {
     try {
       localStorage.setItem('vollmers_egg_orders', JSON.stringify(updatedOrders));
@@ -1092,6 +1117,41 @@ export default function AdminPage({ onNavigate }) {
         {activeTab === 'eier-donnerstag' && (
           <div className="space-y-6">
             
+            {/* Kopfbereich Tab 2: Titel & Schnellaktionen */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-canvas-card p-4 sm:p-5 rounded-2xl border border-ink-border shadow-subtle">
+              <div>
+                <h2 className="font-serif text-2xl text-ink">Eier-Donnerstag Touren & Anfragen</h2>
+                <p className="text-xs text-ink-muted mt-0.5">
+                  Lieferanfragen annehmen, Touren planen und Adressen verwalten. (Live-Sync aktiv)
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    showToast('Aktualisiere Daten aus Cloudflare KV...');
+                    fetchEggOrders();
+                  }}
+                  disabled={eggLoading}
+                  className="px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink hover:bg-canvas-muted text-xs font-semibold flex items-center gap-2 transition-colors disabled:opacity-50"
+                  title="Liste neu aus Cloudflare KV laden"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${eggLoading ? 'animate-spin text-forest' : 'text-forest'}`} />
+                  <span>{eggLoading ? 'Wird geladen...' : 'Aktualisieren'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={openCreateEggOrder}
+                  className="px-4 py-2.5 rounded-xl bg-forest hover:bg-forest-hover text-white text-xs font-semibold flex items-center gap-2 transition-colors shadow-subtle"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Neuer Eintrag</span>
+                </button>
+              </div>
+            </div>
+
             {/* KPI Übersichtskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
