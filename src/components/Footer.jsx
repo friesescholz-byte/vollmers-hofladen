@@ -156,10 +156,10 @@ export default function Footer({ onNavigate, onOpenLegal }) {
             </div>
           </div>
 
-          {/* Spalte 4: Kontakt & Standort */}
+          {/* Spalte 4: Kontakt & Standorte */}
           <div className="space-y-3">
             <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
-              Standort & Kontakt
+              Standorte & Kontakt
             </h4>
             <ul className="space-y-2.5 text-xs text-white/70 leading-relaxed">
               <li className="flex items-start gap-2">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MapPin, Phone, Mail, Clock, ShoppingBag, ExternalLink, Send, CheckCircle2, Navigation, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
+import { MapPin, Phone, Mail, Clock, ShoppingBag, ExternalLink, Send, CheckCircle2, Navigation, ShieldCheck, AlertCircle, Loader2, Store } from 'lucide-react';
 import { MEDIA } from '../data/media';
+import { LOCATIONS } from '../data/locations';
 
 const TURNSTILE_SITEKEY = "0x4AAAAAAFYX_fBuE8TLzVjn";
 
@@ -175,11 +176,16 @@ export default function ContactPage() {
               </div>
             </div>
 
-            {/* Standort & Direktkontakt */}
+            {/* Standorte & Direktkontakt */}
             <div className="p-6 sm:p-8 rounded-2xl sm:rounded-3xl bg-canvas-card border border-ink-border shadow-subtle space-y-5 sm:space-y-6">
-              <h3 className="font-serif text-2xl text-ink">
-                Standort & Adressdaten
-              </h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-serif text-2xl text-ink">
+                  Standorte
+                </h3>
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-forest bg-forest-tint px-2.5 py-1 rounded-full border border-forest-border">
+                  5 Verkaufsstellen
+                </span>
+              </div>
 
               <div className="space-y-4 text-sm text-ink-muted">
                 <div className="flex items-start gap-3.5">
@@ -187,10 +193,13 @@ export default function ContactPage() {
                     <MapPin className="w-5 h-5" />
                   </div>
                   <div>
-                    <strong className="text-ink block font-semibold">Vollmer’s Hofladen</strong>
+                    <div className="flex items-center gap-2">
+                      <strong className="text-ink block font-semibold">Vollmer’s Hofladen</strong>
+                      <span className="text-[10px] font-bold text-forest uppercase tracking-wider bg-forest-tint px-2 py-0.5 rounded-md">Hauptstandort</span>
+                    </div>
                     <span>Lindenallee 24</span><br />
                     <span>31177 Harsum (Ortsteil Machtsum)</span><br />
-                    <span className="text-xs text-ink-faint">Kostenlose Parkplätze direkt auf dem Hof vorhanden</span>
+                    <span className="text-xs text-ink-faint">24/7 Selbstbedienung • Kostenlose Parkplätze direkt auf dem Hof</span>
                   </div>
                 </div>
 
@@ -222,13 +231,13 @@ export default function ContactPage() {
               {/* Google Maps Route & Bewertung */}
               <div className="pt-2 space-y-2.5">
                 <a
-                  href="https://www.google.com/maps/dir/?api=1&destination=Lindenallee+24+31177+Harsum"
+                  href="https://www.google.com/maps/dir/?api=1&destination=Vollmers+Hofladen+Lindenallee+24+31177+Harsum"
                   target="_blank"
                   rel="noreferrer noopener"
                   className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-canvas-muted hover:bg-canvas-subtle border border-ink-border text-ink font-medium text-sm transition-colors"
                 >
                   <Navigation className="w-4 h-4 text-forest" />
-                  <span>Route mit Google Maps planen</span>
+                  <span>Route zum Hauptladen (Machtsum) planen</span>
                   <ExternalLink className="w-3.5 h-3.5 text-ink-faint ml-1" />
                 </a>
 
@@ -463,6 +472,144 @@ export default function ContactPage() {
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* Alle Standorte & Partner-Verkaufsstellen im Detail */}
+        <div className="mt-14 sm:mt-20">
+          <div className="max-w-3xl mb-8 sm:mb-12">
+            <span className="text-xs font-semibold uppercase tracking-widest text-forest">
+              Verkaufsstellen & Partner in der Region
+            </span>
+            <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-ink mt-2">
+              Unsere Standorte
+            </h2>
+            <p className="text-ink-muted text-sm sm:text-base mt-3 leading-relaxed">
+              Unsere frischen Machtsumer Freilandeier und Erzeugnisse erhältst du an unserem eigenen 24/7 SB-Hofladen sowie an ausgewählten Verkaufsstellen regionaler Partner im Umkreis.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+            {LOCATIONS.map((loc) => {
+              const isMain = loc.isMain;
+              return (
+                <div
+                  key={loc.id}
+                  className={`rounded-2xl sm:rounded-3xl p-6 sm:p-8 border transition-all flex flex-col justify-between ${
+                    isMain
+                      ? 'bg-forest text-white border-forest shadow-elevated md:col-span-2'
+                      : 'bg-canvas-card text-ink border-ink-border shadow-subtle hover:border-forest/40'
+                  }`}
+                >
+                  <div className="space-y-4">
+                    {/* Header: Badge & Status */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider ${
+                          isMain
+                            ? 'bg-white/15 text-emerald-300 border border-white/20'
+                            : 'bg-forest-tint text-forest border border-forest-border'
+                        }`}
+                      >
+                        {loc.badge}
+                      </span>
+                      <span
+                        className={`text-xs font-semibold flex items-center gap-1.5 ${
+                          isMain ? 'text-emerald-300' : 'text-forest'
+                        }`}
+                      >
+                        <Clock className="w-3.5 h-3.5" />
+                        <span>{loc.hoursBadge}</span>
+                      </span>
+                    </div>
+
+                    {/* Titel & Adresse */}
+                    <div>
+                      <h3
+                        className={`font-serif text-2xl sm:text-3xl ${
+                          isMain ? 'text-white' : 'text-ink'
+                        }`}
+                      >
+                        {loc.name}
+                      </h3>
+                      <div
+                        className={`flex items-start gap-2 mt-2 text-sm ${
+                          isMain ? 'text-white/80' : 'text-ink-muted'
+                        }`}
+                      >
+                        <MapPin
+                          className={`w-4 h-4 shrink-0 mt-0.5 ${
+                            isMain ? 'text-emerald-300' : 'text-forest'
+                          }`}
+                        />
+                        <span>{loc.addressFull}</span>
+                      </div>
+                    </div>
+
+                    {/* Beschreibung */}
+                    <p
+                      className={`text-xs sm:text-sm leading-relaxed ${
+                        isMain ? 'text-white/85' : 'text-ink-muted'
+                      }`}
+                    >
+                      {loc.description}
+                    </p>
+
+                    {/* Öffnungszeiten Details */}
+                    {loc.schedule ? (
+                      <div
+                        className={`p-3.5 rounded-xl border text-xs space-y-1.5 ${
+                          isMain
+                            ? 'bg-white/10 border-white/15 text-white/90'
+                            : 'bg-canvas border-ink-border/70 text-ink'
+                        }`}
+                      >
+                        <strong className="block text-[11px] font-bold uppercase tracking-wider text-ink-faint">
+                          Reguläre Öffnungszeiten:
+                        </strong>
+                        {loc.schedule.map((item, idx) => (
+                          <div key={idx} className="flex justify-between items-center py-0.5 border-b border-ink-border/30 last:border-0">
+                            <span className="font-medium">{item.days}:</span>
+                            <span className={item.time === 'Geschlossen' ? 'text-red-500 font-medium' : 'font-semibold'}>
+                              {item.time}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div
+                        className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                          isMain
+                            ? 'bg-white/10 border-white/15 text-white/90'
+                            : 'bg-canvas border-ink-border/70 text-ink'
+                        }`}
+                      >
+                        <Clock className={`w-4 h-4 shrink-0 ${isMain ? 'text-emerald-300' : 'text-forest'}`} />
+                        <span><strong>Öffnungszeiten:</strong> {loc.hoursSummary}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Route Button */}
+                  <div className="pt-6 mt-4 border-t border-ink-border/40">
+                    <a
+                      href={loc.mapsUrl}
+                      target="_blank"
+                      rel="noreferrer noopener"
+                      className={`w-full py-3 px-4 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center justify-center gap-2 shadow-subtle ${
+                        isMain
+                          ? 'bg-white text-forest hover:bg-emerald-50'
+                          : 'bg-forest text-white hover:bg-forest-hover'
+                      }`}
+                    >
+                      <Navigation className="w-4 h-4" />
+                      <span>Route mit Google Maps planen</span>
+                      <ExternalLink className="w-3.5 h-3.5 opacity-70 ml-0.5" />
+                    </a>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
 

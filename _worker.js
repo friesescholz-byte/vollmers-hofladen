@@ -19,6 +19,266 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+function formatThursdayText(isoDate) {
+  if (!isoDate) return 'Nächster Donnerstag';
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return isoDate;
+  const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
+  const day = parseInt(match[3], 10);
+  const monthName = months[parseInt(match[2], 10) - 1] || match[2];
+  return `Donnerstag, ${day}. ${monthName} ${match[1]}`;
+}
+
+async function sendCustomerDecisionEmail(env, order, decision) {
+  const resendKey = env.RESEND_API_KEY;
+  if (!resendKey || !order || !order.email) return;
+
+  const dateText = formatThursdayText(order.deliveryDate);
+  const isAccepted = decision === 'accept' || decision === 'accepted';
+
+  const subject = isAccepted
+    ? `🥚 Lieferbestätigung: Deine Eier-Bestellung für ${dateText}`
+    : `Information zu deiner Anfrage für den Eier-Donnerstag (${dateText})`;
+
+  const htmlContent = isAccepted
+    ? `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
+        <div style="border-bottom: 2px solid #274B35; padding-bottom: 16px; margin-bottom: 20px;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #274B35;">Vollmer’s Hofladen • Eier-Donnerstag</span>
+          <h2 style="color: #274B35; margin: 6px 0 0 0; font-size: 24px; font-family: Georgia, serif;">Lieferung bestätigt! 🥚</h2>
+        </div>
+        <p style="color: #333; font-size: 15px; line-height: 1.6;">
+          Hallo <strong>${order.name}</strong>,<br /><br />
+          vielen Dank für deine Bestellung! Wir haben deine Lieferanfrage für den Eier-Donnerstag geprüft und freuen uns sehr, sie dir zu bestätigen.
+        </p>
+        <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin: 20px 0;">
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr>
+              <td style="padding: 8px 0; color: #777; width: 140px;"><strong>Liefertermin:</strong></td>
+              <td style="padding: 8px 0; color: #274B35; font-weight: 700;">${dateText}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #777;"><strong>Bestellmenge:</strong></td>
+              <td style="padding: 8px 0; color: #111; font-weight: 700;">🥚 ${order.eggCount} frische Freilandeier</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #777;"><strong>Lieferadresse:</strong></td>
+              <td style="padding: 8px 0; color: #111; font-weight: 600;">${order.address}</td>
+            </tr>
+            <tr>
+              <td style="padding: 8px 0; color: #777;"><strong>Bezahlung:</strong></td>
+              <td style="padding: 8px 0; color: #274B35; font-weight: 600;">Bar an der Haustür bei Übergabe</td>
+            </tr>
+          </table>
+        </div>
+        <p style="color: #555; font-size: 13px; line-height: 1.6;">
+          <strong>Hinweis:</strong> Bitte halte den Betrag nach Möglichkeit passend bereit. Solltest du am Donnerstag nicht zu Hause sein, stelle uns gerne eine Box oder einen Korb an deine Haustür – wir legen die Eier dann sicher hinein.
+        </p>
+        <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #E6E1D4; font-size: 13px; color: #666;">
+          Herzliche Grüße aus Machtsum,<br />
+          <strong>Familie Vollmer & das Hof-Team</strong><br />
+          <span style="font-size: 11px; color: #999;">Lindenallee 24, 31177 Harsum-Machtsum • 24/7 SB-Hofladen</span>
+        </div>
+      </div>
+    `
+    : `
+      <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
+        <div style="border-bottom: 2px solid #888; padding-bottom: 16px; margin-bottom: 20px;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #777;">Vollmer’s Hofladen • Eier-Donnerstag</span>
+          <h2 style="color: #222; margin: 6px 0 0 0; font-size: 22px; font-family: Georgia, serif;">Information zu deiner Lieferanfrage</h2>
+        </div>
+        <p style="color: #333; font-size: 15px; line-height: 1.6;">
+          Hallo <strong>${order.name}</strong>,<br /><br />
+          vielen Dank für dein Interesse an unseren frischen Machtsumer Freilandeiern zum Eier-Donnerstag.
+        </p>
+        <p style="color: #444; font-size: 14px; line-height: 1.6;">
+          Da unsere Hühner im Freiland täglich frische, aber naturgemäß limitierte Mengen legen, sind unsere Kapazitäten für <strong>${dateText}</strong> leider bereits vollständig vergeben oder unsere geplante Route ist an diesem Tag voll ausgelastet.
+        </p>
+        <div style="background-color: #FFFFFF; padding: 18px; border-radius: 12px; border: 1px solid #ECE7DD; margin: 20px 0; font-size: 13px; color: #555;">
+          Wir können deine Anfrage über <strong>${order.eggCount} Eier</strong> für diesen Donnerstag daher leider nicht annehmen und bitten dich herzlich um Verständnis.
+        </div>
+        <p style="color: #333; font-size: 14px; line-height: 1.6;">
+          👉 <strong>Unser Tipp:</strong> Probiere es sehr gerne für einen der kommenden Donnerstage erneut über unsere Website! Alternativ steht dir unser Hofladen in Machtsum (Lindenallee 24) rund um die Uhr (24/7) mit frischen Eiern zur Verfügung.
+        </p>
+        <div style="margin-top: 28px; padding-top: 20px; border-top: 1px solid #E6E1D4; font-size: 13px; color: #666;">
+          Herzliche Grüße aus Machtsum,<br />
+          <strong>Familie Vollmer</strong><br />
+          <span style="font-size: 11px; color: #999;">Lindenallee 24, 31177 Harsum-Machtsum • 24/7 SB-Hofladen</span>
+        </div>
+      </div>
+    `;
+
+  try {
+    await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${resendKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        from: 'Vollmer’s Hofladen <noreply@scholz-friese-webdesign.de>',
+        to: [order.email],
+        reply_to: env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com',
+        subject,
+        html: htmlContent,
+      }),
+    });
+  } catch (err) {
+    console.warn('Customer decision email failed:', err);
+  }
+}
+
+function renderActionHtml({ title, isAccepted, order, origin }) {
+  const dateText = formatThursdayText(order.deliveryDate);
+  const adminUrl = `${origin}/#admin`;
+
+  return `<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${title} • Vollmer’s Hofladen</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 24px;
+      background-color: #FBF9F5;
+      color: #182019;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .card {
+      max-width: 540px;
+      width: 100%;
+      background: #FFFFFF;
+      border: 1px solid #E6E1D4;
+      border-radius: 24px;
+      padding: 36px 30px;
+      box-shadow: 0 12px 36px rgba(0, 0, 0, 0.04);
+      text-align: center;
+    }
+    .badge {
+      display: inline-block;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 16px;
+    }
+    .badge-accepted {
+      background: #E8F5E9;
+      color: #2E7D32;
+      border: 1px solid #A5D6A7;
+    }
+    .badge-rejected {
+      background: #FFEBEE;
+      color: #C62828;
+      border: 1px solid #FFCDD2;
+    }
+    h1 {
+      font-size: 26px;
+      margin: 0 0 12px 0;
+      color: #182019;
+      font-family: Georgia, serif;
+      line-height: 1.25;
+    }
+    p.sub {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.6;
+      margin: 0 0 24px 0;
+    }
+    .details {
+      background: #FBF9F5;
+      border: 1px solid #ECE7DD;
+      border-radius: 16px;
+      padding: 16px 20px;
+      text-align: left;
+      font-size: 13px;
+      margin-bottom: 24px;
+    }
+    .details table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    .details td {
+      padding: 6px 0;
+      border-bottom: 1px solid #EFEAE0;
+    }
+    .details tr:last-child td {
+      border-bottom: none;
+    }
+    .label {
+      color: #777;
+      width: 120px;
+    }
+    .val {
+      font-weight: 600;
+      color: #111;
+    }
+    .btn {
+      display: inline-block;
+      background: #274B35;
+      color: #FFFFFF;
+      text-decoration: none;
+      font-weight: 600;
+      font-size: 14px;
+      padding: 13px 28px;
+      border-radius: 12px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background: #1C3526;
+    }
+    .footer {
+      margin-top: 24px;
+      font-size: 11px;
+      color: #999;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge ${isAccepted ? 'badge-accepted' : 'badge-rejected'}">
+      ${isAccepted ? '✓ Status: Angenommen' : '✕ Status: Abgelehnt'}
+    </div>
+    <h1>${isAccepted ? 'Lieferanfrage angenommen!' : 'Lieferanfrage abgelehnt'}</h1>
+    <p class="sub">
+      ${isAccepted
+        ? `Die Bestellung wurde erfolgreich bestätigt. Eine automatische Bestätigungs-E-Mail wurde an <strong>${order.email}</strong> gesendet.`
+        : `Die Anfrage wurde abgelehnt. Eine freundliche Information wurde an <strong>${order.email}</strong> gesendet.`}
+    </p>
+
+    <div class="details">
+      <table>
+        <tr><td class="label">Kunde:</td><td class="val">${order.name}</td></tr>
+        <tr><td class="label">Liefertag:</td><td class="val">${dateText}</td></tr>
+        <tr><td class="label">Eiermenge:</td><td class="val">🥚 ${order.eggCount} Freilandeier</td></tr>
+        <tr><td class="label">Adresse:</td><td class="val">${order.address}</td></tr>
+        <tr><td class="label">Bezahlung:</td><td class="val">Bar an der Haustür</td></tr>
+      </table>
+    </div>
+
+    <a href="${adminUrl}" class="btn">
+      👉 Zum Admin-Dashboard (Eier-Donnerstag)
+    </a>
+
+    <div class="footer">
+      Vollmer’s Hofladen • Lieferservice Eier-Donnerstag<br />
+      Bereitgestellt durch Scholz & Friese Webdesign
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 // Generischer KV-Reader (Direktes Binding + REST Fallback)
 async function readKV(env, key) {
   if (env.VOLLMERS_KV && typeof env.VOLLMERS_KV.get === 'function') {
@@ -176,66 +436,70 @@ export default {
         }
 
         // -------------------------------------------------------------
-        // 5. Eier-Donnerstag Endpunkte (Öffentliche Anmeldung & Admin)
+        // 5a. POST /api/eier-donnerstag -> Öffentliche Lieferanfrage
         // -------------------------------------------------------------
         if (url.pathname === '/api/eier-donnerstag' && request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
-          const { name, email, address, eggCount, deliveryDate, message } = body;
+          const { name, email, street, town, townId, zip, address, eggCount, deliveryDate, message } = body;
 
-          if (!name || !email || !address || !eggCount) {
-            return jsonResponse({ success: false, error: 'Bitte fülle Name, E-Mail, Adresse in Machtsum und Eiermenge aus.' }, 400);
+          const resolvedAddress = address || (street && town ? `${street}, ${zip || ''} ${town}` : '');
+
+          if (!name || !email || !resolvedAddress || !eggCount) {
+            return jsonResponse({ success: false, error: 'Bitte fülle alle Pflichtfelder (Name, E-Mail, Adresse, Eiermenge) aus.' }, 400);
           }
 
           const { data: existing } = await readKV(env, 'egg_orders');
           const currentOrders = Array.isArray(existing) ? existing : [];
 
+          const actionToken = 'tok_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
+
           const newOrder = {
             id: 'egg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
             name: String(name).trim(),
             email: String(email).trim(),
-            address: String(address).trim(),
+            street: street ? String(street).trim() : '',
+            town: town ? String(town).trim() : 'Machtsum',
+            townId: townId ? String(townId).trim() : 'machtsum',
+            zip: zip ? String(zip).trim() : '31177',
+            address: String(resolvedAddress).trim(),
             eggCount: Number(eggCount) || String(eggCount).trim(),
             deliveryDate: deliveryDate ? String(deliveryDate).trim() : '',
             message: message ? String(message).trim() : '',
+            status: 'pending', // 'pending' | 'accepted' | 'rejected'
+            actionToken,
             createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
           };
 
           const updatedOrders = [newOrder, ...currentOrders];
           const writeRes = await writeKV(env, 'egg_orders', updatedOrders);
 
           if (!writeRes.ok) {
-            return jsonResponse({ success: false, error: writeRes.error || 'Konnte Anmeldung nicht speichern.' }, 500);
+            return jsonResponse({ success: false, error: writeRes.error || 'Konnte Anfrage nicht speichern.' }, 500);
           }
 
-          // E-Mail-Benachrichtigung an den Hofladen senden (Resend API)
+          // E-Mail-Benachrichtigung an den Hofladen (Resend API)
           const resendKey = env.RESEND_API_KEY;
           const emailRecipient = env.EMAIL_RECIPIENT || 'friese.scholz@gmail.com';
           if (resendKey) {
             try {
-              let deliveryDateText = 'Nächster Donnerstag';
-              if (newOrder.deliveryDate) {
-                const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(newOrder.deliveryDate);
-                if (match) {
-                  const months = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
-                  const day = parseInt(match[3], 10);
-                  const monthName = months[parseInt(match[2], 10) - 1] || match[2];
-                  deliveryDateText = `Donnerstag, ${day}. ${monthName} ${match[1]}`;
-                } else {
-                  deliveryDateText = newOrder.deliveryDate;
-                }
-              }
-
+              const deliveryDateText = formatThursdayText(newOrder.deliveryDate);
               const origin = url.origin && !url.origin.includes('localhost')
                 ? url.origin
                 : 'https://vollmers-hofladen.friese-scholz.workers.dev';
+
+              const acceptUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=accept&token=${actionToken}`;
+              const rejectUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=reject&token=${actionToken}`;
               const adminLink = `${origin}/#admin`;
 
               const htmlContent = `
                 <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
                   <div style="border-bottom: 2px solid #274B35; padding-bottom: 16px; margin-bottom: 20px;">
-                    <h2 style="color: #274B35; margin: 0 0 6px 0; font-size: 24px;">🥚 Neue Eier-Donnerstag Bestellung!</h2>
-                    <p style="color: #666; margin: 0; font-size: 14px;">Ein Machtsumer Haushalt hat frische Freilandeier vorbestellt.</p>
+                    <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #B45309; background-color: #FEF3C7; padding: 3px 8px; border-radius: 6px;">⏳ Neue Lieferanfrage (Ausstehend)</span>
+                    <h2 style="color: #274B35; margin: 10px 0 6px 0; font-size: 24px; font-family: Georgia, serif;">🥚 Eier-Donnerstag Anfrage!</h2>
+                    <p style="color: #666; margin: 0; font-size: 14px;">Ein Kunde hat eine unverbindliche Anfrage für ${deliveryDateText} gestellt.</p>
                   </div>
+
                   <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
                     <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
                       <tr>
@@ -251,7 +515,7 @@ export default {
                         <td style="padding: 8px 0; color: #111; font-weight: 600;">${newOrder.name}</td>
                       </tr>
                       <tr>
-                        <td style="padding: 8px 0; color: #777;"><strong>Adresse (Machtsum):</strong></td>
+                        <td style="padding: 8px 0; color: #777;"><strong>Lieferadresse:</strong></td>
                         <td style="padding: 8px 0; color: #111; font-weight: 600;">${newOrder.address}</td>
                       </tr>
                       <tr>
@@ -264,20 +528,38 @@ export default {
                       </tr>
                     </table>
                   </div>
+
                   ${newOrder.message ? `
                     <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
                       <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Ablagehinweis / Nachricht:</strong>
                       <p style="color: #111; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">${newOrder.message}</p>
                     </div>
                   ` : ''}
-                  <div style="text-align: center; margin: 28px 0 24px 0;">
-                    <a href="${adminLink}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 10px; text-decoration: none;">
-                      👉 Zum Admin-Dashboard (Eier-Donnerstag Liste öffnen)
-                    </a>
-                    <p style="color: #888; font-size: 11px; margin-top: 8px;">
-                      Direktlink: <a href="${adminLink}" style="color: #274B35;">${adminLink}</a>
+
+                  <!-- 2 Aktions-Buttons: Annehmen / Ablehnen -->
+                  <div style="background-color: #FFFFFF; padding: 24px 20px; border-radius: 12px; border: 1px solid #ECE7DD; text-align: center; margin-bottom: 24px;">
+                    <p style="font-size: 14px; font-weight: 700; color: #182019; margin: 0 0 16px 0;">
+                      Möchtest du diese Lieferanfrage annehmen oder ablehnen?
+                    </p>
+                    <div style="margin: 0 auto; text-align: center;">
+                      <a href="${acceptUrl}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
+                        ✅ Anfrage annehmen
+                      </a>
+                      <a href="${rejectUrl}" style="display: inline-block; background-color: #DC2626; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
+                        ❌ Anfrage ablehnen
+                      </a>
+                    </div>
+                    <p style="color: #888; font-size: 11px; margin: 12px 0 0 0;">
+                      Ein Klick öffnet die Bestätigung und versendet automatisch die passende Kunden-E-Mail.
                     </p>
                   </div>
+
+                  <div style="text-align: center; margin: 16px 0;">
+                    <a href="${adminLink}" style="color: #274B35; font-size: 13px; font-weight: 600; text-decoration: underline;">
+                      👉 Oder im Admin-Dashboard bearbeiten
+                    </a>
+                  </div>
+
                   <div style="text-align: center; font-size: 12px; color: #999; border-top: 1px solid #E6E1D4; padding-top: 16px;">
                     Automatisches Liefersystem • Vollmer’s Hofladen Machtsum<br />
                     Bereitgestellt durch Scholz & Friese Webdesign
@@ -288,29 +570,131 @@ export default {
               await fetch('https://api.resend.com/emails', {
                 method: 'POST',
                 headers: {
-                  'Authorization': `Bearer ${resendKey}`,
-                  'Content-Type': 'application/json'
+                  Authorization: `Bearer ${resendKey}`,
+                  'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
                   from: 'Scholz & Friese Webdesign <noreply@scholz-friese-webdesign.de>',
                   to: [emailRecipient],
                   reply_to: newOrder.email,
-                  subject: `[Vollmers Hofladen] 🥚 Neue Eier-Donnerstag Bestellung: ${newOrder.eggCount} Eier von ${newOrder.name}`,
-                  html: htmlContent
-                })
+                  subject: `[Vollmers Hofladen] 🥚 Neue Eier-Lieferanfrage: ${newOrder.eggCount} Eier von ${newOrder.name} (${newOrder.town || 'Machtsum'})`,
+                  html: htmlContent,
+                }),
               });
             } catch (mailErr) {
-              console.warn('E-Mail Benachrichtigung fehlgeschlagen:', mailErr);
+              console.warn('Hofladen notification mail failed:', mailErr);
             }
           }
 
           return jsonResponse({
             success: true,
             order: newOrder,
-            message: 'Anmeldung für den Eier-Donnerstag erfolgreich eingetragen!',
+            message: 'Anfrage für den Eier-Donnerstag erfolgreich übermittelt!',
           });
         }
 
+        // -------------------------------------------------------------
+        // 5b. GET /api/eier-donnerstag/action -> Annehmen/Ablehnen via Link
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/eier-donnerstag/action' && request.method === 'GET') {
+          const orderId = url.searchParams.get('id');
+          const action = url.searchParams.get('action'); // 'accept' | 'reject'
+          const token = url.searchParams.get('token');
+
+          if (!orderId || !action || !['accept', 'reject'].includes(action)) {
+            return new Response('Ungültiger Aktionslink.', { status: 400 });
+          }
+
+          const { data: existing } = await readKV(env, 'egg_orders');
+          const currentOrders = Array.isArray(existing) ? existing : [];
+          const orderIndex = currentOrders.findIndex((o) => o.id === orderId);
+
+          if (orderIndex === -1) {
+            return new Response('Anfrage nicht gefunden oder bereits gelöscht.', { status: 404 });
+          }
+
+          const order = currentOrders[orderIndex];
+
+          // Token-Validierung (falls actionToken hinterlegt ist)
+          if (order.actionToken && token && order.actionToken !== token) {
+            return new Response('Ungültiges Sicherheitstoken.', { status: 403 });
+          }
+
+          const newStatus = action === 'accept' ? 'accepted' : 'rejected';
+          const previousStatus = order.status;
+
+          order.status = newStatus;
+          order.updatedAt = new Date().toISOString();
+          currentOrders[orderIndex] = order;
+
+          await writeKV(env, 'egg_orders', currentOrders);
+
+          // Kunden-E-Mail versenden, falls Status sich geändert hat oder noch pending war
+          if (previousStatus !== newStatus) {
+            await sendCustomerDecisionEmail(env, order, action);
+          }
+
+          const origin = url.origin && !url.origin.includes('localhost')
+            ? url.origin
+            : 'https://vollmers-hofladen.friese-scholz.workers.dev';
+
+          const html = renderActionHtml({
+            title: action === 'accept' ? 'Lieferung angenommen' : 'Lieferung abgelehnt',
+            isAccepted: action === 'accept',
+            order,
+            origin,
+          });
+
+          return new Response(html, {
+            status: 200,
+            headers: {
+              'Content-Type': 'text/html; charset=utf-8',
+              ...corsHeaders,
+            },
+          });
+        }
+
+        // -------------------------------------------------------------
+        // 5c. POST /api/admin/eier-donnerstag/status -> Status-Update im Dashboard
+        // -------------------------------------------------------------
+        if (url.pathname === '/api/admin/eier-donnerstag/status' && request.method === 'POST') {
+          const authHeader = request.headers.get('authorization') || '';
+          if (!authHeader.includes('vollmer_session_')) {
+            return jsonResponse({ success: false, error: 'Nicht autorisiert' }, 401);
+          }
+
+          const body = await request.json().catch(() => ({}));
+          const { id, status } = body;
+
+          if (!id || !['pending', 'accepted', 'rejected'].includes(status)) {
+            return jsonResponse({ success: false, error: 'Ungültige Statusangabe' }, 400);
+          }
+
+          const { data: existing } = await readKV(env, 'egg_orders');
+          const currentOrders = Array.isArray(existing) ? existing : [];
+          const idx = currentOrders.findIndex((o) => o.id === id);
+
+          if (idx === -1) {
+            return jsonResponse({ success: false, error: 'Eintrag nicht gefunden' }, 404);
+          }
+
+          const prevStatus = currentOrders[idx].status;
+          currentOrders[idx].status = status;
+          currentOrders[idx].updatedAt = new Date().toISOString();
+
+          await writeKV(env, 'egg_orders', currentOrders);
+
+          // Falls auf accepted oder rejected gesetzt: Mail an den Kunden!
+          if (status !== 'pending' && status !== prevStatus) {
+            await sendCustomerDecisionEmail(env, currentOrders[idx], status);
+          }
+
+          return jsonResponse({ success: true, order: currentOrders[idx] });
+        }
+
+        // -------------------------------------------------------------
+        // 5d. GET /api/admin/eier-donnerstag & POST /api/admin/eier-donnerstag
+        // -------------------------------------------------------------
         if (url.pathname === '/api/admin/eier-donnerstag' && request.method === 'GET') {
           const authHeader = request.headers.get('authorization') || '';
           if (!authHeader.includes('vollmer_session_')) {

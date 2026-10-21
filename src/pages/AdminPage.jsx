@@ -1,12 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, CheckCircle2,
   XCircle, Upload, AlertCircle, ArrowLeft, Loader2,
-  Search, Image as ImageIcon, Save, RefreshCw, Calendar, MapPin, Clock, Mail, Package
+  Search, Image as ImageIcon, Save, RefreshCw, Calendar, MapPin, Clock, Mail, Package,
+  Filter, Check, X, ChevronDown, User, Info
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { CATEGORIES } from '../data/products';
 import { PLACEHOLDER_EVENT_IMAGE } from '../data/events';
+import { DELIVERY_TOWNS } from '../data/deliveryTowns';
 import EggIcon from '../components/EggIcon';
 import ThursdayMiniCalendar, { getNextThursdayISO, formatThursdayDE } from '../components/ThursdayMiniCalendar';
 import { formatEventDateDisplay } from './EventsPage';
@@ -67,14 +69,22 @@ export default function AdminPage({ onNavigate }) {
   const [eggLoading, setEggLoading] = useState(false);
   const [editingEggOrder, setEditingEggOrder] = useState(null);
   const [isCreatingEggOrder, setIsCreatingEggOrder] = useState(false);
+  const [eggFilterStatus, setEggFilterStatus] = useState('all'); // 'all' | 'pending' | 'accepted' | 'rejected'
+  const [eggFilterThursday, setEggFilterThursday] = useState('all');
+  const [eggFilterTown, setEggFilterTown] = useState('all');
+  const [eggSearch, setEggSearch] = useState('');
+
   const [eggForm, setEggForm] = useState({
     id: '',
     name: '',
+    street: '',
+    townId: 'machtsum',
     address: '',
     email: '',
     eggCount: 10,
     deliveryDate: getNextThursdayISO(),
     message: '',
+    status: 'accepted',
   });
 
   // State: Termine & Märkte
@@ -416,49 +426,101 @@ export default function AdminPage({ onNavigate }) {
     setEggForm({
       id: newId,
       name: '',
+      street: '',
+      townId: 'machtsum',
       address: '',
       email: '',
       eggCount: 10,
       deliveryDate: getNextThursdayISO(),
       message: '',
+      status: 'accepted',
     });
   };
 
   const openEditEggOrder = (order) => {
     setIsCreatingEggOrder(false);
     setEditingEggOrder(order);
+
+    let derivedTownId = order.townId || 'machtsum';
+    let derivedStreet = order.street || '';
+    if (!derivedStreet && order.address) {
+      if (order.address.includes(',')) {
+        derivedStreet = order.address.split(',')[0].trim();
+      } else {
+        derivedStreet = order.address.trim();
+      }
+    }
+
     setEggForm({
       id: order.id,
       name: order.name || '',
+      street: derivedStreet,
+      townId: derivedTownId,
       address: order.address || '',
       email: order.email || '',
       eggCount: order.eggCount || 10,
       deliveryDate: order.deliveryDate || getNextThursdayISO(),
       message: order.message || '',
+      status: order.status || 'pending',
     });
+  };
+
+  const handleUpdateEggStatus = async (order, newStatus) => {
+    try {
+      showToast('Status wird aktualisiert...');
+      const res = await fetch('/api/admin/eier-donnerstag/status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${sessionToken}`,
+        },
+        body: JSON.stringify({ id: order.id, status: newStatus }),
+      });
+
+      const updated = eggOrders.map(o => (o.id === order.id ? { ...o, status: newStatus, updatedAt: new Date().toISOString() } : o));
+      setEggOrders(updated);
+      try { localStorage.setItem('vollmers_egg_orders', JSON.stringify(updated)); } catch (e) {}
+
+      if (newStatus === 'accepted') {
+        showToast(`Anfrage von „${order.name}“ angenommen & Bestätigungs-Mail versendet!`);
+      } else if (newStatus === 'rejected') {
+        showToast(`Anfrage von „${order.name}“ abgelehnt & Info-Mail versendet.`);
+      } else {
+        showToast(`Status für „${order.name}“ auf ausstehend gesetzt.`);
+      }
+    } catch (err) {
+      alert('Fehler beim Aktualisieren: ' + err.message);
+    }
   };
 
   const handleSaveEggOrder = async (e) => {
     e.preventDefault();
-    if (!eggForm.name.trim() || !eggForm.address.trim() || !eggForm.eggCount) {
-      alert('Bitte Name, Adresse und Eieranzahl angeben.');
+    if (!eggForm.name.trim() || !eggForm.eggCount) {
+      alert('Bitte Name und Eieranzahl angeben.');
       return;
     }
 
     setIsSaving(true);
-    const cleanAddress = eggForm.address.trim().toLowerCase().includes('machtsum')
-      ? eggForm.address.trim()
-      : `${eggForm.address.trim()}, 31177 Machtsum`;
+    const selectedT = DELIVERY_TOWNS.find(t => t.id === eggForm.townId) || DELIVERY_TOWNS[0];
+    const fullAddr = eggForm.street.trim()
+      ? `${eggForm.street.trim()}, ${selectedT.zip} ${selectedT.name}`
+      : eggForm.address.trim() || `${selectedT.zip} ${selectedT.name}`;
 
     const normalizedEntry = {
       ...eggForm,
       name: eggForm.name.trim(),
-      address: cleanAddress,
+      street: eggForm.street.trim(),
+      townId: selectedT.id,
+      town: selectedT.name,
+      zip: selectedT.zip,
+      address: fullAddr,
       email: eggForm.email.trim(),
       eggCount: Number(eggForm.eggCount) || eggForm.eggCount,
       deliveryDate: eggForm.deliveryDate ? String(eggForm.deliveryDate).trim() : getNextThursdayISO(),
       message: eggForm.message.trim(),
+      status: eggForm.status || 'accepted',
       createdAt: editingEggOrder?.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
 
     const updated = isCreatingEggOrder
@@ -662,6 +724,67 @@ export default function AdminPage({ onNavigate }) {
   const outOfStockCount = products.filter(p => p.isOutOfStock).length;
   const inStockCount = products.length - outOfStockCount;
   const totalEggCount = eggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
+
+  const pendingEggOrders = useMemo(() => {
+    return eggOrders.filter(o => !o.status || o.status === 'pending');
+  }, [eggOrders]);
+
+  const acceptedEggOrders = useMemo(() => {
+    return eggOrders.filter(o => o.status === 'accepted');
+  }, [eggOrders]);
+
+  const rejectedEggOrders = useMemo(() => {
+    return eggOrders.filter(o => o.status === 'rejected');
+  }, [eggOrders]);
+
+  const acceptedEggCount = useMemo(() => {
+    return acceptedEggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
+  }, [acceptedEggOrders]);
+
+  const availableThursdays = useMemo(() => {
+    const dates = Array.from(new Set(eggOrders.map(o => o.deliveryDate).filter(Boolean)));
+    return dates.sort();
+  }, [eggOrders]);
+
+  const thursdaysStats = useMemo(() => {
+    const stats = {};
+    eggOrders.forEach(o => {
+      const d = o.deliveryDate || 'Ohne Datum';
+      if (!stats[d]) stats[d] = { totalEggs: 0, acceptedEggs: 0, households: 0 };
+      const eggs = Number(o.eggCount) || 0;
+      stats[d].totalEggs += eggs;
+      stats[d].households += 1;
+      if (o.status === 'accepted') stats[d].acceptedEggs += eggs;
+    });
+    return stats;
+  }, [eggOrders]);
+
+  const filteredEggOrders = useMemo(() => {
+    return eggOrders.filter(o => {
+      const status = o.status || 'pending';
+      if (eggFilterStatus !== 'all' && status !== eggFilterStatus) return false;
+      if (eggFilterThursday !== 'all' && o.deliveryDate !== eggFilterThursday) return false;
+      if (eggFilterTown !== 'all') {
+        const matchesTown = (o.townId && o.townId === eggFilterTown) ||
+          (o.town && o.town.toLowerCase() === eggFilterTown.toLowerCase()) ||
+          (o.address && o.address.toLowerCase().includes(eggFilterTown.toLowerCase()));
+        if (!matchesTown) return false;
+      }
+      if (eggSearch.trim()) {
+        const q = eggSearch.toLowerCase();
+        const matchesQuery = (o.name && o.name.toLowerCase().includes(q)) ||
+          (o.address && o.address.toLowerCase().includes(q)) ||
+          (o.email && o.email.toLowerCase().includes(q)) ||
+          (o.message && o.message.toLowerCase().includes(q));
+        if (!matchesQuery) return false;
+      }
+      return true;
+    });
+  }, [eggOrders, eggFilterStatus, eggFilterThursday, eggFilterTown, eggSearch]);
+
+  const filteredEggCount = useMemo(() => {
+    return filteredEggOrders.reduce((sum, o) => sum + (Number(o.eggCount) || 0), 0);
+  }, [filteredEggOrders]);
 
   return (
     <div className="min-h-screen bg-canvas text-ink py-10 px-4 sm:px-6 lg:px-8">
@@ -964,11 +1087,12 @@ export default function AdminPage({ onNavigate }) {
         )}
 
         {/* =====================================================================
-            TAB 2: EIER-DONNERSTAG (Kompakte & übersichtliche Liste)
+            TAB 2: EIER-DONNERSTAG (Ausstehende Anfragen, Filter & Tour-Übersicht)
         ===================================================================== */}
         {activeTab === 'eier-donnerstag' && (
           <div className="space-y-6">
-            {/* Kurz-Statistik */}
+            
+            {/* KPI Übersichtskarten */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
               <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
                 <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider block">
@@ -977,37 +1101,292 @@ export default function AdminPage({ onNavigate }) {
                 <span className="font-serif text-2xl sm:text-3xl text-ink font-bold block mt-1">
                   {eggOrders.length} {eggOrders.length === 1 ? 'Haushalt' : 'Haushalte'}
                 </span>
+                <span className="text-[11px] text-ink-faint block mt-0.5">
+                  Über alle Ortschaften hinweg
+                </span>
               </div>
 
               <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
                 <span className="text-xs font-semibold text-forest uppercase tracking-wider block">
-                  Gesamtmenge Eier (Donnerstag)
+                  Bestätigte Eier (Gesamt)
                 </span>
                 <span className="font-serif text-2xl sm:text-3xl text-forest font-bold block mt-1">
-                  {totalEggCount} Eier
+                  {acceptedEggCount} Eier
+                </span>
+                <span className="text-[11px] text-ink-faint block mt-0.5">
+                  {acceptedEggOrders.length} angenommene Lieferungen
                 </span>
               </div>
 
-              <div className="p-4 sm:p-5 rounded-2xl bg-canvas-card border border-ink-border shadow-subtle">
-                <span className="text-xs font-semibold text-ink-muted uppercase tracking-wider block">
-                  Liefergebiet & Abrechnung
+              <div className={`p-4 sm:p-5 rounded-2xl border shadow-subtle ${
+                pendingEggOrders.length > 0
+                  ? 'bg-amber-50/70 border-amber-300'
+                  : 'bg-canvas-card border-ink-border'
+              }`}>
+                <span className={`text-xs font-semibold uppercase tracking-wider block ${
+                  pendingEggOrders.length > 0 ? 'text-amber-800' : 'text-ink-muted'
+                }`}>
+                  Ausstehende Anfragen
                 </span>
-                <span className="font-serif text-xl sm:text-2xl text-ink font-bold block mt-1">
-                  31177 Machtsum • Bar
+                <span className={`font-serif text-2xl sm:text-3xl font-bold block mt-1 ${
+                  pendingEggOrders.length > 0 ? 'text-amber-900' : 'text-ink'
+                }`}>
+                  {pendingEggOrders.length} {pendingEggOrders.length === 1 ? 'Anfrage' : 'Anfragen'}
+                </span>
+                <span className="text-[11px] text-ink-faint block mt-0.5">
+                  {pendingEggOrders.length > 0 ? 'Warten auf Annahme/Ablehnung' : 'Alle Anfragen bearbeitet'}
                 </span>
               </div>
             </div>
 
-            {/* Kompakte Übersichtstabelle / Liste */}
+            {/* SEKTION 1: AUSSTEHENDE ANFRAGEN (Pending) GANZ OBEN */}
+            {pendingEggOrders.length > 0 ? (
+              <div className="p-5 sm:p-6 rounded-3xl bg-amber-50/80 border-2 border-amber-300 shadow-elevated space-y-4 animate-in fade-in duration-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-amber-200/80 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <span className="w-3 h-3 rounded-full bg-amber-500 animate-ping shrink-0" />
+                    <h2 className="font-serif text-xl sm:text-2xl text-amber-950 font-bold">
+                      Ausstehende Lieferanfragen ({pendingEggOrders.length})
+                    </h2>
+                  </div>
+                  <span className="text-xs text-amber-800 font-medium">
+                    ⚡ Klicke auf „Annehmen“ oder „Ablehnen“ – Kunde erhält automatisch die passende E-Mail.
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {pendingEggOrders.map((order) => (
+                    <div
+                      key={order.id}
+                      className="p-4 sm:p-5 rounded-2xl bg-white border border-amber-200 shadow-subtle flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-2">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <strong className="text-base text-ink font-semibold block">
+                              {order.name}
+                            </strong>
+                            {order.email && (
+                              <a
+                                href={`mailto:${order.email}`}
+                                className="text-xs text-ink-muted hover:text-forest flex items-center gap-1 mt-0.5"
+                              >
+                                <Mail className="w-3 h-3 shrink-0" />
+                                <span>{order.email}</span>
+                              </a>
+                            )}
+                          </div>
+                          <span className="px-3 py-1 rounded-full bg-forest-tint text-forest font-bold text-xs shrink-0 flex items-center gap-1 border border-forest-border">
+                            <EggIcon className="w-3.5 h-3.5" />
+                            <span>{order.eggCount} Eier</span>
+                          </span>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-xs text-ink font-medium">
+                          <MapPin className="w-3.5 h-3.5 text-forest shrink-0" />
+                          <span>{order.address}</span>
+                          {order.town && (
+                            <span className="px-2 py-0.5 rounded-md bg-canvas-muted text-ink-muted text-[10px] font-bold uppercase tracking-wider">
+                              {order.town}
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1.5 text-xs text-forest font-semibold">
+                          <Calendar className="w-3.5 h-3.5 shrink-0" />
+                          <span>{order.deliveryDate ? formatThursdayDE(order.deliveryDate) : 'Nächster Donnerstag'}</span>
+                        </div>
+
+                        {order.message && (
+                          <div className="p-2.5 rounded-xl bg-canvas text-xs text-ink-muted leading-relaxed border border-ink-border/50">
+                            <strong className="block text-[10px] uppercase font-bold text-ink-faint mb-0.5">
+                              Hinweis / Nachricht:
+                            </strong>
+                            <span>{order.message}</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Schnell-Aktionen */}
+                      <div className="pt-2 border-t border-ink-border/50 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateEggStatus(order, 'accepted')}
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-forest text-white hover:bg-forest-hover text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors shadow-subtle"
+                        >
+                          <Check className="w-4 h-4" />
+                          <span>Annehmen</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleUpdateEggStatus(order, 'rejected')}
+                          className="py-2.5 px-3 rounded-xl bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <X className="w-4 h-4" />
+                          <span>Ablehnen</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 text-emerald-800 text-xs flex items-center gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span><strong>Alles aktuell:</strong> Keine ausstehenden Lieferanfragen vorhanden. Alle Anfragen wurden bearbeitet.</span>
+              </div>
+            )}
+
+            {/* SEKTION 2: FILTER & TOUR-ÜBERSICHT */}
+            <div className="p-4 sm:p-5 rounded-3xl bg-canvas-card border border-ink-border shadow-subtle space-y-4">
+              <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                {/* Suche */}
+                <div className="relative flex-1 max-w-md">
+                  <Search className="w-4 h-4 text-ink-faint absolute left-3.5 top-3" />
+                  <input
+                    type="text"
+                    value={eggSearch}
+                    onChange={(e) => setEggSearch(e.target.value)}
+                    placeholder="Haushalt, Straße, Ortschaft, E-Mail suchen..."
+                    className="w-full pl-9 pr-4 py-2 rounded-xl bg-canvas border border-ink-border text-xs text-ink placeholder:text-ink-faint focus:outline-none focus:border-forest"
+                  />
+                </div>
+
+                {/* Filter Dropdowns: Donnerstag & Ortschaft */}
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Ortschaft Filter */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold uppercase text-ink-muted hidden sm:inline">Ort:</span>
+                    <select
+                      value={eggFilterTown}
+                      onChange={(e) => setEggFilterTown(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-canvas border border-ink-border text-xs font-medium text-ink focus:outline-none focus:border-forest"
+                    >
+                      <option value="all">Alle Ortschaften ({eggOrders.length})</option>
+                      {DELIVERY_TOWNS.map((t) => {
+                        const count = eggOrders.filter(
+                          (o) =>
+                            o.townId === t.id ||
+                            (o.town && o.town.toLowerCase() === t.name.toLowerCase()) ||
+                            (o.address && o.address.toLowerCase().includes(t.name.toLowerCase()))
+                        ).length;
+                        return (
+                          <option key={t.id} value={t.id}>
+                            {t.name} ({count})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Liefer-Donnerstag Filter */}
+                  <div className="flex items-center gap-1">
+                    <span className="text-[11px] font-bold uppercase text-ink-muted hidden sm:inline">Donnerstag:</span>
+                    <select
+                      value={eggFilterThursday}
+                      onChange={(e) => setEggFilterThursday(e.target.value)}
+                      className="px-3 py-2 rounded-xl bg-canvas border border-ink-border text-xs font-medium text-ink focus:outline-none focus:border-forest"
+                    >
+                      <option value="all">Alle Liefertage ({totalEggCount} Eier)</option>
+                      {availableThursdays.map((date) => {
+                        const stats = thursdaysStats[date] || { totalEggs: 0, households: 0 };
+                        return (
+                          <option key={date} value={date}>
+                            {formatThursdayDE(date)} — {stats.totalEggs} Eier ({stats.households} Haushalte)
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* Status Filter Tabs */}
+              <div className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-ink-border/60">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-ink-muted mr-1">Status:</span>
+                <button
+                  type="button"
+                  onClick={() => setEggFilterStatus('all')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all ${
+                    eggFilterStatus === 'all'
+                      ? 'bg-forest text-white shadow-subtle'
+                      : 'bg-canvas text-ink-muted hover:text-ink border border-ink-border/60'
+                  }`}
+                >
+                  Alle ({eggOrders.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEggFilterStatus('pending')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    eggFilterStatus === 'pending'
+                      ? 'bg-amber-600 text-white shadow-subtle'
+                      : 'bg-canvas text-amber-800 hover:text-amber-900 border border-amber-300'
+                  }`}
+                >
+                  <span>⏳ Ausstehend ({pendingEggOrders.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEggFilterStatus('accepted')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    eggFilterStatus === 'accepted'
+                      ? 'bg-emerald-700 text-white shadow-subtle'
+                      : 'bg-canvas text-emerald-800 hover:text-emerald-900 border border-emerald-300'
+                  }`}
+                >
+                  <span>✅ Angenommen ({acceptedEggOrders.length})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEggFilterStatus('rejected')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-medium transition-all flex items-center gap-1.5 ${
+                    eggFilterStatus === 'rejected'
+                      ? 'bg-red-700 text-white shadow-subtle'
+                      : 'bg-canvas text-red-800 hover:text-red-900 border border-red-300'
+                  }`}
+                >
+                  <span>❌ Abgelehnt ({rejectedEggOrders.length})</span>
+                </button>
+              </div>
+
+              {/* Aktive Tour-Zusammenfassung (wie viele Eier an welchem Donnerstag) */}
+              {eggFilterThursday !== 'all' ? (
+                <div className="p-3.5 rounded-2xl bg-forest-tint border border-forest-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-forest shrink-0" />
+                    <span>
+                      Liefer-Tour am <strong>{formatThursdayDE(eggFilterThursday)}</strong>:
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-4 text-forest font-bold text-sm">
+                    <span>
+                      🥚 {thursdaysStats[eggFilterThursday]?.totalEggs || 0} Eier gesamt ({thursdaysStats[eggFilterThursday]?.households || 0} Haushalte)
+                    </span>
+                    <span className="text-emerald-700 font-semibold text-xs">
+                      davon {thursdaysStats[eggFilterThursday]?.acceptedEggs || 0} Eier bestätigt
+                    </span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* SEKTION 3: DIE GESAMT-TABELLE / LISTE */}
             <div className="rounded-3xl bg-canvas-card border border-ink-border shadow-subtle overflow-hidden">
-              <div className="px-5 py-4 border-b border-ink-border bg-canvas flex items-center justify-between">
+              <div className="px-5 py-4 border-b border-ink-border bg-canvas flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <div>
-                  <h2 className="font-serif text-xl sm:text-2xl text-ink">
-                    Teilnehmerliste Eier-Donnerstag
-                  </h2>
+                  <h3 className="font-serif text-xl sm:text-2xl text-ink">
+                    Alle Einträge ({filteredEggOrders.length})
+                  </h3>
                   <p className="text-xs text-ink-muted">
-                    Alle eingetragenen Lieferadressen in Machtsum mit gewähltem Donnerstag, Eieranzahl, E-Mail und Nachricht
+                    {filteredEggCount} Eier insgesamt in der aktuellen Filteransicht
                   </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-forest">
+                    Summe gefiltert: <strong>{filteredEggCount} Eier</strong>
+                  </span>
                 </div>
               </div>
 
@@ -1016,107 +1395,162 @@ export default function AdminPage({ onNavigate }) {
                   <Loader2 className="w-4 h-4 animate-spin" />
                   <span>Lade Einträge...</span>
                 </div>
-              ) : eggOrders.length === 0 ? (
+              ) : filteredEggOrders.length === 0 ? (
                 <div className="p-10 text-center space-y-3">
                   <EggIcon className="w-8 h-8 text-forest mx-auto" />
                   <p className="text-sm text-ink-muted">
-                    Noch keine Anmeldungen für den Eier-Donnerstag vorhanden.
+                    Keine Einträge für die aktuellen Filterkriterien gefunden.
                   </p>
                   <button
-                    onClick={openCreateEggOrder}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-forest text-white text-xs font-semibold"
+                    onClick={() => {
+                      setEggFilterStatus('all');
+                      setEggFilterThursday('all');
+                      setEggFilterTown('all');
+                      setEggSearch('');
+                    }}
+                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-canvas border border-ink-border text-ink text-xs font-semibold hover:bg-canvas-muted"
                   >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>Ersten Eintrag manuell anlegen</span>
+                    <span>Filter zurücksetzen</span>
                   </button>
                 </div>
               ) : (
                 <div className="divide-y divide-ink-border/70">
                   {/* Tabellenkopf (Desktop) */}
-                  <div className="hidden lg:grid lg:grid-cols-12 gap-4 px-6 py-3 bg-canvas-muted text-[11px] font-bold uppercase tracking-wider text-ink-muted">
-                    <div className="col-span-3">Name & E-Mail</div>
-                    <div className="col-span-2">Adresse (Machtsum)</div>
-                    <div className="col-span-2">Liefer-Donnerstag</div>
-                    <div className="col-span-2">Anzahl Eier</div>
-                    <div className="col-span-2">Nachricht</div>
+                  <div className="hidden lg:grid lg:grid-cols-12 gap-3 px-6 py-3 bg-canvas-muted text-[11px] font-bold uppercase tracking-wider text-ink-muted">
+                    <div className="col-span-3">Kunde & E-Mail</div>
+                    <div className="col-span-3">Adresse & Ortschaft</div>
+                    <div className="col-span-2">Liefertermin</div>
+                    <div className="col-span-1">Menge</div>
+                    <div className="col-span-2">Status</div>
                     <div className="col-span-1 text-right">Aktion</div>
                   </div>
 
-                  {eggOrders.map((order) => (
-                    <div
-                      key={order.id}
-                      className="p-4 sm:px-6 sm:py-3.5 hover:bg-canvas/60 transition-colors grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-4 items-center text-xs"
-                    >
-                      {/* Name & E-Mail */}
-                      <div className="lg:col-span-3 min-w-0">
-                        <strong className="text-sm text-ink font-semibold block truncate">
-                          {order.name}
-                        </strong>
-                        {order.email && (
-                          <a
-                            href={`mailto:${order.email}`}
-                            className="text-ink-muted hover:text-forest truncate flex items-center gap-1 mt-0.5"
-                          >
-                            <Mail className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{order.email}</span>
-                          </a>
-                        )}
-                      </div>
+                  {filteredEggOrders.map((order) => {
+                    const status = order.status || 'pending';
+                    return (
+                      <div
+                        key={order.id}
+                        className={`p-4 sm:px-6 sm:py-3.5 hover:bg-canvas/60 transition-colors grid grid-cols-1 lg:grid-cols-12 gap-2.5 lg:gap-3 items-center text-xs ${
+                          status === 'pending' ? 'bg-amber-50/20' : ''
+                        }`}
+                      >
+                        {/* Name & E-Mail */}
+                        <div className="lg:col-span-3 min-w-0">
+                          <strong className="text-sm text-ink font-semibold block truncate">
+                            {order.name}
+                          </strong>
+                          {order.email && (
+                            <a
+                              href={`mailto:${order.email}`}
+                              className="text-ink-muted hover:text-forest truncate flex items-center gap-1 mt-0.5"
+                            >
+                              <Mail className="w-3 h-3 shrink-0" />
+                              <span className="truncate">{order.email}</span>
+                            </a>
+                          )}
+                          {order.message && (
+                            <span className="text-[11px] text-ink-faint truncate block italic mt-0.5">
+                              "{order.message}"
+                            </span>
+                          )}
+                        </div>
 
-                      {/* Adresse */}
-                      <div className="lg:col-span-2 flex items-center gap-1.5 text-ink font-medium min-w-0">
-                        <MapPin className="w-3.5 h-3.5 text-forest shrink-0" />
-                        <span className="truncate">{order.address}</span>
-                      </div>
+                        {/* Adresse */}
+                        <div className="lg:col-span-3 flex items-start gap-1.5 text-ink font-medium min-w-0">
+                          <MapPin className="w-3.5 h-3.5 text-forest shrink-0 mt-0.5" />
+                          <div className="min-w-0">
+                            <span className="block truncate">{order.address}</span>
+                            {order.town && (
+                              <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-canvas border border-ink-border text-[10px] font-semibold text-ink-muted uppercase tracking-wider">
+                                {order.town}
+                              </span>
+                            )}
+                          </div>
+                        </div>
 
-                      {/* Gewählter Donnerstag */}
-                      <div className="lg:col-span-2">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-ink-border text-ink font-semibold text-[11px]">
-                          <Calendar className="w-3.5 h-3.5 text-forest shrink-0" />
-                          <span className="truncate">
-                            {order.deliveryDate ? formatThursdayDE(order.deliveryDate) : 'Nächster Do.'}
+                        {/* Gewählter Donnerstag */}
+                        <div className="lg:col-span-2">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-canvas border border-ink-border text-ink font-semibold text-[11px]">
+                            <Calendar className="w-3.5 h-3.5 text-forest shrink-0" />
+                            <span className="truncate">
+                              {order.deliveryDate ? formatThursdayDE(order.deliveryDate) : 'Nächster Do.'}
+                            </span>
                           </span>
-                        </span>
-                      </div>
+                        </div>
 
-                      {/* Anzahl Eier */}
-                      <div className="lg:col-span-2">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-forest-tint border border-forest-border text-forest font-bold text-xs">
-                          <EggIcon className="w-3.5 h-3.5" />
-                          <span>{order.eggCount} Eier</span>
-                        </span>
-                      </div>
+                        {/* Anzahl Eier */}
+                        <div className="lg:col-span-1">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-forest-tint border border-forest-border text-forest font-bold text-xs whitespace-nowrap">
+                            <EggIcon className="w-3 h-3" />
+                            <span>{order.eggCount} Eier</span>
+                          </span>
+                        </div>
 
-                      {/* Nachricht */}
-                      <div className="lg:col-span-2 text-ink-muted">
-                        {order.message ? (
-                          <p className="line-clamp-2 leading-snug bg-canvas px-2.5 py-1.5 rounded-lg border border-ink-border/60">
-                            {order.message}
-                          </p>
-                        ) : (
-                          <span className="text-ink-faint italic">—</span>
-                        )}
-                      </div>
+                        {/* Status & Status-Umschaltung */}
+                        <div className="lg:col-span-2 flex items-center gap-2">
+                          {status === 'pending' ? (
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateEggStatus(order, 'accepted')}
+                                className="px-2.5 py-1 rounded-lg bg-forest text-white hover:bg-forest-hover font-semibold text-[11px] flex items-center gap-1 shadow-subtle"
+                                title="Anfrage annehmen und Bestätigung senden"
+                              >
+                                <Check className="w-3 h-3" />
+                                <span>Annehmen</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleUpdateEggStatus(order, 'rejected')}
+                                className="px-2 py-1 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 font-semibold text-[11px] border border-red-200"
+                                title="Anfrage ablehnen und Information senden"
+                              >
+                                <X className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : status === 'accepted' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateEggStatus(order, 'pending')}
+                              className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[11px] flex items-center gap-1 hover:opacity-80"
+                              title="Klicken zum Zurücksetzen auf Ausstehend"
+                            >
+                              <CheckCircle2 className="w-3 h-3" />
+                              <span>Angenommen</span>
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateEggStatus(order, 'pending')}
+                              className="px-2.5 py-1 rounded-full bg-red-100 text-red-800 border border-red-300 font-bold text-[11px] flex items-center gap-1 hover:opacity-80"
+                              title="Klicken zum Zurücksetzen auf Ausstehend"
+                            >
+                              <XCircle className="w-3 h-3" />
+                              <span>Abgelehnt</span>
+                            </button>
+                          )}
+                        </div>
 
-                      {/* Aktionen */}
-                      <div className="lg:col-span-1 flex items-center justify-end gap-1.5 pt-2 lg:pt-0">
-                        <button
-                          onClick={() => openEditEggOrder(order)}
-                          className="p-2 rounded-lg bg-canvas hover:bg-canvas-muted text-ink border border-ink-border transition-colors"
-                          title="Eintrag bearbeiten"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteEggOrder(order)}
-                          className="p-2 rounded-lg bg-canvas hover:bg-red-50 text-red-600 border border-ink-border transition-colors"
-                          title="Eintrag löschen"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {/* Aktionen */}
+                        <div className="lg:col-span-1 flex items-center justify-end gap-1.5 pt-2 lg:pt-0">
+                          <button
+                            onClick={() => openEditEggOrder(order)}
+                            className="p-1.5 rounded-lg bg-canvas hover:bg-canvas-muted text-ink border border-ink-border transition-colors"
+                            title="Eintrag bearbeiten"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleDeleteEggOrder(order)}
+                            className="p-1.5 rounded-lg bg-canvas hover:bg-red-50 text-red-600 border border-ink-border transition-colors"
+                            title="Eintrag löschen"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1465,18 +1899,37 @@ export default function AdminPage({ onNavigate }) {
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
-                      Straße & Hausnr. (Machtsum) *
+                      Lieferort (Ortschaft) *
+                    </label>
+                    <select
+                      value={eggForm.townId}
+                      onChange={(e) => setEggForm({ ...eggForm, townId: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
+                    >
+                      {DELIVERY_TOWNS.map((town) => (
+                        <option key={town.id} value={town.id}>
+                          {town.name} ({town.zip})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Straße & Hausnummer *
                     </label>
                     <input
                       type="text"
                       required
-                      value={eggForm.address}
-                      onChange={(e) => setEggForm({ ...eggForm, address: e.target.value })}
+                      value={eggForm.street || eggForm.address}
+                      onChange={(e) => setEggForm({ ...eggForm, street: e.target.value, address: e.target.value })}
                       placeholder="z.B. Lindenallee 15"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm focus:outline-none focus:border-forest"
                     />
                   </div>
+                </div>
 
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
                       Anzahl Eier *
@@ -1489,6 +1942,21 @@ export default function AdminPage({ onNavigate }) {
                       onChange={(e) => setEggForm({ ...eggForm, eggCount: e.target.value })}
                       className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm font-semibold focus:outline-none focus:border-forest"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block font-semibold text-ink uppercase tracking-wider mb-1">
+                      Status der Anfrage
+                    </label>
+                    <select
+                      value={eggForm.status || 'accepted'}
+                      onChange={(e) => setEggForm({ ...eggForm, status: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-canvas border border-ink-border text-ink text-sm font-semibold focus:outline-none focus:border-forest"
+                    >
+                      <option value="pending">⏳ Ausstehend (In Prüfung)</option>
+                      <option value="accepted">✅ Angenommen (Bestätigt)</option>
+                      <option value="rejected">❌ Abgelehnt (Kapazität erschöpft)</option>
+                    </select>
                   </div>
                 </div>
 

@@ -176,11 +176,14 @@ export function apiPlugin() {
           }
 
           // -------------------------------------------------------------
-          // 3c. Eier-Donnerstag Endpunkte
+          // 3c. Eier-Donnerstag Endpunkte (Anfrage, Action, Admin)
           // -------------------------------------------------------------
           if (pathname === '/api/eier-donnerstag' && req.method === 'POST') {
-            const { name, email, address, eggCount, deliveryDate, message } = await parseJsonBody();
-            if (!name || !email || !address || !eggCount) {
+            const body = await parseJsonBody();
+            const { name, email, street, town, townId, zip, address, eggCount, deliveryDate, message } = body;
+            const resolvedAddress = address || (street && town ? `${street}, ${zip || ''} ${town}` : '');
+
+            if (!name || !email || !resolvedAddress || !eggCount) {
               res.statusCode = 400;
               return res.end(JSON.stringify({ success: false, error: 'Bitte fülle alle Pflichtfelder aus.' }));
             }
@@ -193,15 +196,24 @@ export function apiPlugin() {
             } catch (e) {}
             if (!Array.isArray(currentOrders)) currentOrders = [];
 
+            const actionToken = 'tok_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 10);
+
             const newOrder = {
               id: 'egg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
               name: String(name).trim(),
               email: String(email).trim(),
-              address: String(address).trim(),
+              street: street ? String(street).trim() : '',
+              town: town ? String(town).trim() : 'Machtsum',
+              townId: townId ? String(townId).trim() : 'machtsum',
+              zip: zip ? String(zip).trim() : '31177',
+              address: String(resolvedAddress).trim(),
               eggCount: Number(eggCount) || String(eggCount).trim(),
               deliveryDate: deliveryDate ? String(deliveryDate).trim() : '',
               message: message ? String(message).trim() : '',
+              status: 'pending',
+              actionToken,
               createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
             };
             const updatedOrders = [newOrder, ...currentOrders];
 
@@ -227,14 +239,19 @@ export function apiPlugin() {
                   }
                 }
 
-                const adminLink = 'https://vollmers-hofladen.friese-scholz.workers.dev/#admin';
+                const origin = 'https://vollmers-hofladen.friese-scholz.workers.dev';
+                const acceptUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=accept&token=${actionToken}`;
+                const rejectUrl = `${origin}/api/eier-donnerstag/action?id=${newOrder.id}&action=reject&token=${actionToken}`;
+                const adminLink = `${origin}/#admin`;
 
                 const htmlContent = `
                   <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #FBF9F5; border-radius: 16px; border: 1px solid #E6E1D4;">
                     <div style="border-bottom: 2px solid #274B35; padding-bottom: 16px; margin-bottom: 20px;">
-                      <h2 style="color: #274B35; margin: 0 0 6px 0; font-size: 24px;">🥚 Neue Eier-Donnerstag Bestellung!</h2>
-                      <p style="color: #666; margin: 0; font-size: 14px;">Ein Machtsumer Haushalt hat frische Freilandeier vorbestellt.</p>
+                      <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #B45309; background-color: #FEF3C7; padding: 3px 8px; border-radius: 6px;">⏳ Neue Lieferanfrage (Ausstehend)</span>
+                      <h2 style="color: #274B35; margin: 10px 0 6px 0; font-size: 24px; font-family: Georgia, serif;">🥚 Eier-Donnerstag Anfrage!</h2>
+                      <p style="color: #666; margin: 0; font-size: 14px;">Ein Kunde hat eine unverbindliche Anfrage für ${deliveryDateText} gestellt.</p>
                     </div>
+
                     <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
                       <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
                         <tr>
@@ -250,7 +267,7 @@ export function apiPlugin() {
                           <td style="padding: 8px 0; color: #111; font-weight: 600;">${newOrder.name}</td>
                         </tr>
                         <tr>
-                          <td style="padding: 8px 0; color: #777;"><strong>Adresse (Machtsum):</strong></td>
+                          <td style="padding: 8px 0; color: #777;"><strong>Lieferadresse:</strong></td>
                           <td style="padding: 8px 0; color: #111; font-weight: 600;">${newOrder.address}</td>
                         </tr>
                         <tr>
@@ -263,20 +280,37 @@ export function apiPlugin() {
                         </tr>
                       </table>
                     </div>
+
                     ${newOrder.message ? `
                       <div style="background-color: #FFFFFF; padding: 20px; border-radius: 12px; border: 1px solid #ECE7DD; margin-bottom: 20px;">
                         <strong style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Ablagehinweis / Nachricht:</strong>
                         <p style="color: #111; font-size: 14px; line-height: 1.6; margin: 0; white-space: pre-wrap;">${newOrder.message}</p>
                       </div>
                     ` : ''}
-                    <div style="text-align: center; margin: 28px 0 24px 0;">
-                      <a href="${adminLink}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 600; font-size: 14px; padding: 12px 24px; border-radius: 10px; text-decoration: none;">
-                        👉 Zum Admin-Dashboard (Eier-Donnerstag Liste öffnen)
-                      </a>
-                      <p style="color: #888; font-size: 11px; margin-top: 8px;">
-                        Direktlink: <a href="${adminLink}" style="color: #274B35;">${adminLink}</a>
+
+                    <div style="background-color: #FFFFFF; padding: 24px 20px; border-radius: 12px; border: 1px solid #ECE7DD; text-align: center; margin-bottom: 24px;">
+                      <p style="font-size: 14px; font-weight: 700; color: #182019; margin: 0 0 16px 0;">
+                        Möchtest du diese Lieferanfrage annehmen oder ablehnen?
+                      </p>
+                      <div style="margin: 0 auto; text-align: center;">
+                        <a href="${acceptUrl}" style="display: inline-block; background-color: #274B35; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
+                          ✅ Anfrage annehmen
+                        </a>
+                        <a href="${rejectUrl}" style="display: inline-block; background-color: #DC2626; color: #FFFFFF; font-weight: 700; font-size: 14px; padding: 13px 26px; border-radius: 10px; text-decoration: none; margin: 6px;">
+                          ❌ Anfrage ablehnen
+                        </a>
+                      </div>
+                      <p style="color: #888; font-size: 11px; margin: 12px 0 0 0;">
+                        Ein Klick öffnet die Bestätigung und versendet automatisch die passende Kunden-E-Mail.
                       </p>
                     </div>
+
+                    <div style="text-align: center; margin: 16px 0;">
+                      <a href="${adminLink}" style="color: #274B35; font-size: 13px; font-weight: 600; text-decoration: underline;">
+                        👉 Oder im Admin-Dashboard bearbeiten
+                      </a>
+                    </div>
+
                     <div style="text-align: center; font-size: 12px; color: #999; border-top: 1px solid #E6E1D4; padding-top: 16px;">
                       Automatisches Liefersystem • Vollmer’s Hofladen Machtsum<br />
                       Bereitgestellt durch Scholz & Friese Webdesign
@@ -294,7 +328,7 @@ export function apiPlugin() {
                     from: 'Scholz & Friese Webdesign <noreply@scholz-friese-webdesign.de>',
                     to: [emailRecipient],
                     reply_to: newOrder.email,
-                    subject: `[Vollmers Hofladen] 🥚 Neue Eier-Donnerstag Bestellung: ${newOrder.eggCount} Eier von ${newOrder.name}`,
+                    subject: `[Vollmers Hofladen] 🥚 Neue Eier-Lieferanfrage: ${newOrder.eggCount} Eier von ${newOrder.name} (${newOrder.town})`,
                     html: htmlContent
                   })
                 });
@@ -305,6 +339,107 @@ export function apiPlugin() {
 
             res.statusCode = 200;
             return res.end(JSON.stringify({ success: true, order: newOrder }));
+          }
+
+          if (pathname === '/api/eier-donnerstag/action' && req.method === 'GET') {
+            const orderId = url.searchParams.get('id');
+            const action = url.searchParams.get('action');
+            const token = url.searchParams.get('token');
+
+            let currentOrders = [];
+            try {
+              const kvGet = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvGet.ok) currentOrders = await kvGet.json();
+            } catch (e) {}
+
+            const order = currentOrders.find(o => o.id === orderId);
+            if (!order) {
+              res.statusCode = 404;
+              return res.end('Anfrage nicht gefunden.');
+            }
+
+            order.status = action === 'accept' ? 'accepted' : 'rejected';
+            order.updatedAt = new Date().toISOString();
+
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(currentOrders)
+            });
+
+            // Resend an Kunden
+            if (resendKey && order.email) {
+              const isAccepted = action === 'accept';
+              const subject = isAccepted
+                ? `🥚 Lieferbestätigung: Deine Eier-Bestellung für Donnerstag`
+                : `Information zu deiner Anfrage für den Eier-Donnerstag`;
+              const textContent = isAccepted
+                ? `<div style="font-family: sans-serif; padding: 20px;"><h2>Lieferung bestätigt! 🥚</h2><p>Hallo ${order.name}, deine Bestellung über ${order.eggCount} Eier wurde angenommen.</p></div>`
+                : `<div style="font-family: sans-serif; padding: 20px;"><h2>Information zu deiner Anfrage</h2><p>Hallo ${order.name}, leider sind unsere Kapazitäten für diesen Donnerstag erschöpft.</p></div>`;
+
+              await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${resendKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  from: 'Vollmer’s Hofladen <noreply@scholz-friese-webdesign.de>',
+                  to: [order.email],
+                  subject,
+                  html: textContent,
+                })
+              }).catch(() => {});
+            }
+
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.statusCode = 200;
+            return res.end(`
+              <!DOCTYPE html>
+              <html lang="de">
+              <head><meta charset="utf-8"/><title>Status aktualisiert</title></head>
+              <body style="font-family: sans-serif; background: #FBF9F5; padding: 40px; text-align: center;">
+                <div style="max-width: 500px; margin: auto; background: white; padding: 30px; border-radius: 20px; border: 1px solid #E6E1D4;">
+                  <h1 style="color: #274B35;">${action === 'accept' ? '✅ Lieferanfrage angenommen!' : '❌ Lieferanfrage abgelehnt'}</h1>
+                  <p>Die Anfrage von ${order.name} wurde als <strong>${order.status}</strong> markiert.</p>
+                  <p><a href="/#admin" style="display: inline-block; background: #274B35; color: white; padding: 12px 24px; border-radius: 10px; text-decoration: none;">Zum Admin-Dashboard</a></p>
+                </div>
+              </body>
+              </html>
+            `);
+          }
+
+          if (pathname === '/api/admin/eier-donnerstag/status' && req.method === 'POST') {
+            const authHeader = req.headers['authorization'];
+            if (!authHeader || !authHeader.includes('vollmer_session_')) {
+              res.statusCode = 401;
+              return res.end(JSON.stringify({ success: false, error: 'Nicht autorisiert' }));
+            }
+            const { id, status } = await parseJsonBody();
+            let currentOrders = [];
+            try {
+              const kvGet = await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+                headers: { 'Authorization': `Bearer ${apiToken}` }
+              });
+              if (kvGet.ok) currentOrders = await kvGet.json();
+            } catch (e) {}
+
+            const order = currentOrders.find(o => o.id === id);
+            if (!order) {
+              res.statusCode = 404;
+              return res.end(JSON.stringify({ success: false, error: 'Nicht gefunden' }));
+            }
+
+            order.status = status;
+            order.updatedAt = new Date().toISOString();
+
+            await fetch(`https://api.cloudflare.com/client/v4/accounts/${accountId}/storage/kv/namespaces/${kvNsId}/values/egg_orders`, {
+              method: 'PUT',
+              headers: { 'Authorization': `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify(currentOrders)
+            });
+
+            res.statusCode = 200;
+            return res.end(JSON.stringify({ success: true, order }));
           }
 
           if (pathname === '/api/admin/eier-donnerstag' && req.method === 'GET') {
