@@ -99,14 +99,6 @@ export default function Footer({ onNavigate, onOpenLegal }) {
               </li>
               <li>
                 <button
-                  onClick={() => onNavigate('eier-donnerstag')}
-                  className="hover:text-white transition-colors"
-                >
-                  Eier-Donnerstag
-                </button>
-              </li>
-              <li>
-                <button
                   onClick={() => onNavigate('termine')}
                   className="hover:text-white transition-colors"
                 >

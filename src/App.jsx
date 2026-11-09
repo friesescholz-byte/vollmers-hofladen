@@ -18,7 +18,7 @@ import { ProductProvider } from './context/ProductContext';
 
 const VALID_PAGES = [
   'produkte',
-  'eier-donnerstag',
+  // 'eier-donnerstag', // Temporär im Frontend ausgeblendet
   'termine',
   'freilandhaltung',
   'ueber-uns',

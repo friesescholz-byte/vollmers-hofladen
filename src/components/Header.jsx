@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { ShoppingBag, Menu, X, Clock, ChevronRight, ChevronDown } from 'lucide-react';
-import EggIcon from './EggIcon';
 import { MEDIA } from '../data/media';
 
 export default function Header({ currentPage, onNavigate }) {
@@ -93,14 +92,6 @@ export default function Header({ currentPage, onNavigate }) {
               <span>Sortiment</span>
             </button>
 
-            {/* Eier-Donnerstag mit schickem Eier-Icon */}
-            <button
-              onClick={() => handleNavClick('eier-donnerstag')}
-              className={getBtnClass(currentPage === 'eier-donnerstag')}
-            >
-              <EggIcon className="w-4 h-4 text-forest shrink-0" />
-              <span>Eier-Donnerstag</span>
-            </button>
 
             {/* Termine & Märkte */}
             <button
@@ -244,21 +235,6 @@ export default function Header({ currentPage, onNavigate }) {
                 }`}
               >
                 <span>Sortiment & Hofladen</span>
-                <ChevronRight className="w-4 h-4 opacity-60" />
-              </button>
-
-              <button
-                onClick={() => handleNavClick('eier-donnerstag')}
-                className={`flex items-center justify-between p-3.5 rounded-2xl text-left text-base font-semibold transition-all shadow-subtle ${
-                  currentPage === 'eier-donnerstag'
-                    ? 'bg-forest text-white'
-                    : 'bg-white text-ink border border-ink-border/80 hover:border-forest/40 hover:bg-[#F5F2EA]'
-                }`}
-              >
-                <span className="flex items-center gap-2">
-                  <EggIcon className={`w-4 h-4 ${currentPage === 'eier-donnerstag' ? 'text-emerald-300' : 'text-forest'}`} />
-                  <span>Eier-Donnerstag</span>
-                </span>
                 <ChevronRight className="w-4 h-4 opacity-60" />
               </button>
 
