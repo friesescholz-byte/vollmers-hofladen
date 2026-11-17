@@ -19,6 +19,34 @@ function jsonResponse(data, status = 200) {
   });
 }
 
+async function verifyTurnstileToken(env, request, token, allowTestBypass = false) {
+  if (!token) {
+    return { success: false, error: 'Bitte bestätige zuerst den Sicherheits-Check (Turnstile).' };
+  }
+  const turnstileSecret = env.TURNSTILE_SECRET_KEY;
+  if (!turnstileSecret) {
+    return { success: true };
+  }
+  if (allowTestBypass && token === 'test-bypass-token') {
+    return { success: true };
+  }
+  const clientIp = request.headers.get('cf-connecting-ip') || '';
+  const params = new URLSearchParams();
+  params.append('secret', turnstileSecret);
+  params.append('response', token);
+  if (clientIp) params.append('remoteip', clientIp);
+
+  const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+    method: 'POST',
+    body: params,
+  });
+  const verifyData = await verifyRes.json();
+  if (!verifyData.success) {
+    return { success: false, error: 'Sicherheits-Check (Turnstile) fehlgeschlagen. Bitte erneut bestätigen.' };
+  }
+  return { success: true };
+}
+
 function formatThursdayText(isoDate) {
   if (!isoDate) return 'Nächster Donnerstag';
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
@@ -460,12 +488,17 @@ export default {
         }
 
         // -------------------------------------------------------------
-        // 2. POST /api/admin/login -> Prüft Admin-Passwort & Geräte-Status
+        // 2. POST /api/admin/login -> Prüft Turnstile, Admin-Passwort & Geräte-Status
         // -------------------------------------------------------------
         if (url.pathname === '/api/admin/login' && request.method === 'POST') {
           const body = await request.json().catch(() => ({}));
           const adminPw = env.ADMIN_PASSWORD || env.Passwort;
-          const { password, deviceId, deviceName } = body;
+          const { password, deviceId, deviceName, turnstileToken } = body;
+
+          const turnstileCheck = await verifyTurnstileToken(env, request, turnstileToken, false);
+          if (!turnstileCheck.success) {
+            return jsonResponse({ success: false, error: turnstileCheck.error }, 400);
+          }
 
           if (!password || !adminPw || password !== adminPw) {
             return jsonResponse({ success: false, error: 'Ungültiges Passwort' }, 401);
@@ -1055,27 +1088,9 @@ export default {
           if (!name || !email || !message) {
             return jsonResponse({ success: false, error: 'Bitte fülle alle Pflichtfelder aus.' }, 400);
           }
-          if (!turnstileToken) {
-            return jsonResponse({ success: false, error: 'Bitte bestätige den Spam-Schutz.' }, 400);
-          }
-
-          // Turnstile Spam-Schutz prüfen
-          const turnstileSecret = env.TURNSTILE_SECRET_KEY;
-          if (turnstileSecret) {
-            const clientIp = request.headers.get('cf-connecting-ip') || '';
-            const params = new URLSearchParams();
-            params.append('secret', turnstileSecret);
-            params.append('response', turnstileToken);
-            if (clientIp) params.append('remoteip', clientIp);
-
-            const verifyRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-              method: 'POST',
-              body: params
-            });
-            const verifyData = await verifyRes.json();
-            if (!verifyData.success && turnstileToken !== 'test-bypass-token') {
-              return jsonResponse({ success: false, error: 'Spam-Schutz-Prüfung fehlgeschlagen.' }, 400);
-            }
+          const turnstileCheck = await verifyTurnstileToken(env, request, turnstileToken, true);
+          if (!turnstileCheck.success) {
+            return jsonResponse({ success: false, error: turnstileCheck.error }, 400);
           }
 
           // E-Mail über Resend senden

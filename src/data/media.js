@@ -48,4 +48,7 @@ export const MEDIA = {
   prodEggLiqueur: `${R2_BASE}/Produkte/Vollmers_Hofladen_Produkte_11.webp`,
   prodPastaSpirelli: `${R2_BASE}/Produkte/Vollmers_Hofladen_Produkte_12.webp`,
   prodEggsCarton: `${R2_BASE}/Produkte/Vollmers_Hofladen_Produkte_13.webp`,
+  prodHofcafeEis: `${R2_BASE}/Produkte/Vollmers_Hofladen_Produkte_14.webp`,
+  prodBueltaJoghurt: `${R2_BASE}/Produkte/Vollmers_Hofladen_Produkte_15.webp`,
+  prodBueltaHoftaler: `${R2_BASE}/Produkte/Vollmers_Hofladen_Produkte_16.webp`,
 };

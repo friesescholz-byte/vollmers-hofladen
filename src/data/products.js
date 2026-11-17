@@ -4,6 +4,7 @@ export const CATEGORIES = [
   { id: 'all', label: 'Gesamtes Sortiment' },
   { id: 'eier-nudeln', label: 'Eier, Nudeln & Likör' },
   { id: 'fleisch-gefluegel', label: 'Duroc & Freilandgeflügel' },
+  { id: 'eis-joghurt-kaese', label: 'Eis, Joghurt & Käse' },
   { id: 'frisch-feinkost', label: 'Frischgemüse & Feinkost' },
   { id: 'partner', label: 'Regionale Partner' },
 ];
@@ -215,6 +216,54 @@ export const PRODUCTS = [
       'Ideal für Sonntagsbrötchen und Süßspeisen'
     ],
     availability: 'Stets im 24/7 SB-Hofladen vorrätig',
+    preorderUrl: null,
+  },
+  {
+    id: 'hofcafe-eis',
+    name: 'Hofcafé Eis (fach.werk)',
+    category: 'eis-joghurt-kaese',
+    unit: '160 ml & 500 ml Becher',
+    image: MEDIA.prodHofcafeEis,
+    badge: 'fach.werk Hofcafé Eis',
+    description: 'Handwerklich hergestelltes Speiseeis vom fach.werk Hofcafé. Erhältlich im praktischen 160 ml Becher für den Genuss direkt vor Ort sowie im großen 500 ml Becher für zu Hause – in verschiedenen wechselnden Sorten.',
+    details: [
+      'Erhältlich als 160 ml und 500 ml Becher',
+      'Verschiedene wechselnde Sorten in der Gefriertruhe',
+      'Handwerklich hergestellt vom regionalen Partner fach.werk'
+    ],
+    availability: 'Stets im 24/7 SB-Hofladen (Gefriertruhe)',
+    preorderUrl: null,
+  },
+  {
+    id: 'buelta-joghurt',
+    name: 'Lokaler Joghurt (Bülta Milch)',
+    category: 'eis-joghurt-kaese',
+    unit: '400 g Glas',
+    image: MEDIA.prodBueltaJoghurt,
+    badge: 'Bülta Milch • Region Hildesheim',
+    description: 'Cremiger, lokal produzierter Joghurt von Bülta Milch aus Bültum in der Region Hildesheim. Im gekühlten Regal warten regelmäßig verschiedene, wechselnde Sorten auf dich.',
+    details: [
+      'Im praktischen 400 g Glas direkt aus dem Kühlregal',
+      'Wechselnde Sorten (z. B. Natur, Pfirsich-Maracuja, Kirsch-Apfel-Zimt)',
+      'Kurze Wege aus der Region Hildesheim (Bültum)'
+    ],
+    availability: 'Stets gekühlt im 24/7 SB-Hofladen',
+    preorderUrl: null,
+  },
+  {
+    id: 'buelta-hoftaler',
+    name: 'Unser Hoftaler Weichkäse',
+    category: 'eis-joghurt-kaese',
+    unit: 'Lokaler Weichkäse (vakuumiert)',
+    image: MEDIA.prodBueltaHoftaler,
+    badge: 'Bülta Milch • Region Hildesheim',
+    description: 'Milder, handwerklich hergestellter lokaler Weichkäse von Bülta Milch aus der Region Hildesheim. Frisch gekühlt und vakuumiert in wechselnden Sorten verfügbar.',
+    details: [
+      'Wechselnde Sorten (z. B. Natur, Griechische Kräuter, Rosa Pfeffer)',
+      'Hygienisch vakuumiert direkt aus dem Kühlregal',
+      'Regionaler Weichkäse aus Bültum bei Hildesheim'
+    ],
+    availability: 'Stets gekühlt im 24/7 SB-Hofladen',
     preorderUrl: null,
   },
 ];

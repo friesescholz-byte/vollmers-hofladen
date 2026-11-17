@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   ShieldCheck, Lock, LogOut, Plus, Edit2, Trash2, CheckCircle2,
   XCircle, Upload, AlertCircle, ArrowLeft, Loader2,
@@ -15,6 +15,7 @@ import { formatEventDateDisplay } from './EventsPage';
 
 // SHA-256 Hash für das Weymann-Architektur-Sicherheitsprinzip (Passwort: Vollmer2026!Admin)
 const ADMIN_HASH = "c2f10cc1feec3662f28e52e0d7558b49bbb8403f4e86e81b58bdc3a99d77be70";
+const TURNSTILE_SITEKEY = "0x4AAAAAAFYX_fBuE8TLzVjn";
 
 async function sha256(message) {
   const msgBuffer = new TextEncoder().encode(message);
@@ -105,6 +106,11 @@ export default function AdminPage({ onNavigate }) {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
+  // Cloudflare Turnstile für Admin-Login
+  const [turnstileToken, setTurnstileToken] = useState('');
+  const turnstileRef = useRef(null);
+  const widgetIdRef = useRef(null);
+
   // 2FA / Login State
   const [authStep, setAuthStep] = useState('password'); // 'password' | '2fa'
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -113,6 +119,56 @@ export default function AdminPage({ onNavigate }) {
   const [trustDevice, setTrustDevice] = useState(true);
   const [maskedEmail, setMaskedEmail] = useState('i***@vollmers-hofladen.de');
   const [pendingDeviceId, setPendingDeviceId] = useState('');
+
+  useEffect(() => {
+    if (sessionToken || authStep !== 'password') {
+      if (widgetIdRef.current && window.turnstile) {
+        try { window.turnstile.remove(widgetIdRef.current); } catch (e) {}
+        widgetIdRef.current = null;
+      }
+      setTurnstileToken('');
+      return;
+    }
+
+    let interval;
+    const renderWidget = () => {
+      if (turnstileRef.current && window.turnstile && !widgetIdRef.current) {
+        try {
+          turnstileRef.current.innerHTML = '';
+          widgetIdRef.current = window.turnstile.render(turnstileRef.current, {
+            sitekey: TURNSTILE_SITEKEY,
+            callback: (token) => {
+              setTurnstileToken(token);
+              setLoginError('');
+            },
+            'expired-callback': () => setTurnstileToken(''),
+            'error-callback': (errorCode) => {
+              console.warn('Admin Turnstile Widget-Status:', errorCode);
+            },
+            theme: 'light',
+          });
+          if (interval) clearInterval(interval);
+        } catch (e) {
+          console.error('Admin Turnstile render error:', e);
+        }
+      }
+    };
+
+    renderWidget();
+    if (!widgetIdRef.current) {
+      interval = setInterval(() => {
+        if (window.turnstile) renderWidget();
+      }, 100);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+      if (widgetIdRef.current && window.turnstile) {
+        try { window.turnstile.remove(widgetIdRef.current); } catch (e) {}
+        widgetIdRef.current = null;
+      }
+    };
+  }, [sessionToken, authStep]);
 
   // Trusted Devices Management
   const [isDevicesModalOpen, setIsDevicesModalOpen] = useState(false);
@@ -288,12 +344,18 @@ export default function AdminPage({ onNavigate }) {
     setEggOrders(updatedOrders);
   };
 
-  // 1. Weymann-Login mit 2FA & Geräte-Erkennung
+  // 1. Weymann-Login mit Turnstile, 2FA & Geräte-Erkennung
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginLoading(true);
     setLoginError('');
     setTwoFactorError('');
+
+    if (!turnstileToken) {
+      setLoginError('Bitte bestätige kurz den Sicherheits-Check (Turnstile).');
+      setLoginLoading(false);
+      return;
+    }
 
     try {
       const inputHash = await sha256(passwordInput);
@@ -313,11 +375,13 @@ export default function AdminPage({ onNavigate }) {
           password: passwordInput,
           deviceId,
           deviceName,
+          turnstileToken,
         }),
       });
 
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success) {
+        setTurnstileToken('');
         if (data.requires2FA) {
           // Neues Gerät -> 2FA-Code eingeben
           setAuthStep('2fa');
@@ -345,6 +409,10 @@ export default function AdminPage({ onNavigate }) {
         refreshEvents();
       } else {
         setLoginError(data.error || 'Server-Authentifizierung fehlgeschlagen.');
+        if (widgetIdRef.current && window.turnstile) {
+          try { window.turnstile.reset(widgetIdRef.current); } catch (err) {}
+        }
+        setTurnstileToken('');
       }
     } catch (err) {
       console.warn('Login fallback triggered:', err);
@@ -1137,9 +1205,17 @@ export default function AdminPage({ onNavigate }) {
                   />
                 </div>
 
+                {/* Cloudflare Turnstile Sicherheits-Check */}
+                <div className="p-3.5 rounded-xl bg-canvas border border-ink-border">
+                  <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-muted block mb-2">
+                    Sicherheitsprüfung
+                  </span>
+                  <div ref={turnstileRef} className="min-h-[65px] flex items-center justify-center sm:justify-start"></div>
+                </div>
+
                 <button
                   type="submit"
-                  disabled={loginLoading || !passwordInput}
+                  disabled={loginLoading || !passwordInput || !turnstileToken}
                   className="w-full py-3.5 sm:py-4 rounded-xl bg-forest text-white font-semibold text-sm hover:bg-forest-hover transition-colors shadow-subtle flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {loginLoading ? (

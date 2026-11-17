@@ -93,10 +93,31 @@ export function apiPlugin() {
           }
 
           // -------------------------------------------------------------
-          // 2. POST /api/admin/login -> Prüft Admin-Passwort & Geräte-Status
+          // 2. POST /api/admin/login -> Prüft Turnstile, Admin-Passwort & Geräte-Status
           // -------------------------------------------------------------
           if (pathname === '/api/admin/login' && req.method === 'POST') {
-            const { password, deviceId, deviceName } = await parseJsonBody();
+            const { password, deviceId, deviceName, turnstileToken } = await parseJsonBody();
+            if (!turnstileToken) {
+              res.statusCode = 400;
+              return res.end(JSON.stringify({ success: false, error: 'Bitte bestätige zuerst den Sicherheits-Check (Turnstile).' }));
+            }
+            if (turnstileSecret) {
+              const turnstileParams = new URLSearchParams();
+              turnstileParams.append('secret', turnstileSecret);
+              turnstileParams.append('response', turnstileToken);
+              const clientIp = req.headers['cf-connecting-ip'] || req.socket?.remoteAddress || '';
+              if (clientIp) turnstileParams.append('remoteip', clientIp);
+              const tRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+                method: 'POST',
+                body: turnstileParams
+              });
+              const tData = await tRes.json();
+              if (!tData.success) {
+                res.statusCode = 400;
+                return res.end(JSON.stringify({ success: false, error: 'Sicherheits-Check (Turnstile) fehlgeschlagen. Bitte erneut bestätigen.' }));
+              }
+            }
+
             if (password !== adminPw) {
               res.statusCode = 401;
               return res.end(JSON.stringify({ success: false, error: 'Ungültiges Passwort' }));
