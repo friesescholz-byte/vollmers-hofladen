@@ -3,6 +3,7 @@ import { ShoppingBag, ExternalLink, Info, Check, Sparkles, Filter, X, XCircle } 
 import { CATEGORIES } from '../data/products';
 import { MEDIA } from '../data/media';
 import { useProducts } from '../context/ProductContext';
+import FarmSilhouettePattern from '../components/FarmSilhouettePattern';
 
 export default function ProductsPage({ selectedProductFromSearch }) {
   const { products } = useProducts();
@@ -14,8 +15,9 @@ export default function ProductsPage({ selectedProductFromSearch }) {
     : products.filter(p => p.category === activeCategory);
 
   return (
-    <div className="py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="relative overflow-hidden py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
+      <FarmSilhouettePattern variant="products" />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
         <div className="max-w-3xl mb-10 sm:mb-14 md:mb-16">

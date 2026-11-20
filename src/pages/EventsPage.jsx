@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Calendar, Clock, MapPin, ChevronDown, ArrowRight } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { PLACEHOLDER_EVENT_IMAGE } from '../data/events';
+import FarmSilhouettePattern from '../components/FarmSilhouettePattern';
 
 const MONTHS_SHORT = ['JAN', 'FEB', 'MÄR', 'APR', 'MAI', 'JUN', 'JUL', 'AUG', 'SEP', 'OKT', 'NOV', 'DEZ'];
 const MONTHS_FULL = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];
@@ -100,8 +101,9 @@ export default function EventsPage({ onNavigate }) {
   });
 
   return (
-    <div className="py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="relative overflow-hidden py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
+      <FarmSilhouettePattern variant="events" />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
         <div className="max-w-3xl mb-10 sm:mb-14 md:mb-16">

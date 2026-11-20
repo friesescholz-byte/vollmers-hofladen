@@ -5,6 +5,7 @@ import { MEDIA } from '../data/media';
 import BeholdInstagramFeed from '../components/BeholdInstagramFeed';
 import HofladenHeroButton from '../components/HofladenHeroButton';
 import { useProducts } from '../context/ProductContext';
+import FarmSilhouettePattern from '../components/FarmSilhouettePattern';
 
 export default function HomePage({ onNavigate, onSelectProduct }) {
   const { products } = useProducts();
@@ -198,8 +199,9 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
       </div>
 
       {/* 2. FREILANDHALTUNG ZUM ANFASSEN (Story-Section mit Asymmetrie) */}
-      <section className="pt-8 sm:pt-12 pb-16 sm:pb-20 md:pb-28 bg-[#F4F1EA] border-b border-[#E6E1D4]">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="relative overflow-hidden pt-8 sm:pt-12 pb-16 sm:pb-20 md:pb-28 bg-[#F4F1EA] border-b border-[#E6E1D4]">
+        <FarmSilhouettePattern variant="home-pasture" />
+        <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-center">
             
@@ -591,8 +593,9 @@ export default function HomePage({ onNavigate, onSelectProduct }) {
       <BeholdInstagramFeed feedId="" />
 
       {/* 7. ANFAHRT & KONTAKT-TEASER */}
-      <section className="py-16 sm:py-20 md:py-28 bg-canvas">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+      <section className="relative overflow-hidden py-16 sm:py-20 md:py-28 bg-canvas">
+        <FarmSilhouettePattern variant="home-cta" />
+        <div className="relative z-10 max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <span className="text-xs font-semibold uppercase tracking-widest text-forest">
             Besuche uns vor Ort
           </span>

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Heart, Compass, CheckCircle2, MapPin, ArrowRight } from 'lucide-react';
 import { MEDIA } from '../data/media';
+import FarmSilhouettePattern from '../components/FarmSilhouettePattern';
 
 export default function AboutPage({ onNavigate }) {
   const milestones = [
@@ -32,8 +33,9 @@ export default function AboutPage({ onNavigate }) {
   ];
 
   return (
-    <div className="py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="relative overflow-hidden py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
+      <FarmSilhouettePattern variant="about" />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
         <div className="max-w-3xl mb-12 sm:mb-16 md:mb-20">

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { MapPin, Phone, Mail, Clock, ShoppingBag, ExternalLink, Send, CheckCircle2, Navigation, ShieldCheck, AlertCircle, Loader2, Store } from 'lucide-react';
 import { MEDIA } from '../data/media';
 import { LOCATIONS } from '../data/locations';
+import FarmSilhouettePattern from '../components/FarmSilhouettePattern';
 
 const TURNSTILE_SITEKEY = "0x4AAAAAAFYX_fBuE8TLzVjn";
 
@@ -126,8 +127,9 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="relative overflow-hidden py-10 sm:py-16 md:py-20 bg-canvas min-h-screen">
+      <FarmSilhouettePattern variant="contact" />
+      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         
         {/* Header */}
         <div className="max-w-3xl mb-10 sm:mb-14 md:mb-16">
