@@ -160,10 +160,6 @@ export default function ContactPage() {
                 Rund um die Uhr an 7 Tagen die Woche.
               </h3>
 
-              <p className="text-white/80 text-sm leading-relaxed">
-                Unser Selbstbedienungsladen kennt keine Ladenschlusszeiten. Ob früh morgens um 6:00 Uhr vor der Arbeit oder sonntags um 20:00 Uhr – du bist jederzeit herzlich willkommen.
-              </p>
-
               <div className="pt-4 border-t border-white/15 grid grid-cols-2 gap-4 text-xs text-white/80">
                 <div>
                   <strong className="block text-white text-sm">Montag bis Sonntag</strong>
@@ -417,9 +413,6 @@ export default function ContactPage() {
           <h2 className="font-serif text-3xl sm:text-4xl md:text-5xl text-ink mt-2">
             Unsere Standorte
           </h2>
-          <p className="text-ink-muted text-sm sm:text-base mt-3 leading-relaxed">
-            Unsere frischen Machtsumer Freilandeier und Erzeugnisse erhältst du an unserem eigenen 24/7 SB-Hofladen sowie an ausgewählten Verkaufsstellen regionaler Partner im Umkreis.
-          </p>
         </div>
 
         {/* Verkaufsstelle Hauptstandort Machtsum & Google Maps Karte */}

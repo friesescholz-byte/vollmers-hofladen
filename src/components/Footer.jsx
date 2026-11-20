@@ -137,14 +137,11 @@ export default function Footer({ onNavigate, onOpenLegal }) {
             <h4 className="text-xs font-semibold uppercase tracking-wider text-emerald-400">
               Öffnungszeiten
             </h4>
-            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 space-y-2 text-xs">
+            <div className="p-3.5 rounded-xl bg-white/5 border border-white/10 text-xs">
               <div className="flex items-center gap-2 text-emerald-300 font-semibold">
                 <Clock className="w-4 h-4" />
                 <span>24 Stunden geöffnet</span>
               </div>
-              <p className="text-white/70 leading-relaxed">
-                Unser Selbstbedienungs-Hofladen in Machtsum steht dir an <strong>7 Tagen die Woche, rund um die Uhr</strong> zur Verfügung.
-              </p>
             </div>
           </div>
 

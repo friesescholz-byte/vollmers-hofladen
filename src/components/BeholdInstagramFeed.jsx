@@ -11,7 +11,6 @@ const FALLBACK_POSTS = [
     caption: 'Goldene Abendstunden auf der Weide. Unsere Hennen genießen das frische Gras bis zum Sonnenuntergang vor der Bockwindmühle. 🌾🐔 #machtsumerfreilandeier #hühnermobil',
     likes: 142,
     comments: 12,
-    date: 'Vor 2 Tagen',
     url: 'https://www.instagram.com/vollmers_hofladen/'
   },
   {
@@ -20,7 +19,6 @@ const FALLBACK_POSTS = [
     caption: 'Unsere Duroc-Schweine haben sichtlich Spaß beim Wühlen im satten Grün. Freilandhaltung bedeutet für uns echte Lebensqualität für die Tiere! 🐷🌱 #durocschwein',
     likes: 189,
     comments: 16,
-    date: 'Vor 4 Tagen',
     url: 'https://www.instagram.com/vollmers_hofladen/'
   },
   {
@@ -29,7 +27,6 @@ const FALLBACK_POSTS = [
     caption: 'Frisch gerührt: Neue Charge unseres beliebten Eierlikörs mit eigener Hof-Sahne und Freilandeiern. Wer hat schon probiert? 🥂✨ #eierlikör #handgemacht',
     likes: 124,
     comments: 9,
-    date: 'Vor 6 Tagen',
     url: 'https://www.instagram.com/vollmers_hofladen/'
   },
   {
@@ -38,7 +35,6 @@ const FALLBACK_POSTS = [
     caption: 'Regale wieder frisch aufgefüllt! Eier in allen Größen, Nudeln, Honig und kühles Bio-Fleisch. Kommt vorbei – unser SB-Laden hat 24/7 für euch offen! 🥚🚪',
     likes: 167,
     comments: 14,
-    date: 'Vor 1 Woche',
     url: 'https://www.instagram.com/vollmers_hofladen/'
   },
   {
@@ -47,7 +43,6 @@ const FALLBACK_POSTS = [
     caption: 'Ein Blick hinter die Kulissen: Felix und sein Team kümmern sich jeden Tag persönlich um das Wohl unserer Tiere. Regionalität beginnt mit Vertrauen. ❤️🌾',
     likes: 215,
     comments: 24,
-    date: 'Vor 1 Woche',
     url: 'https://www.instagram.com/vollmers_hofladen/'
   },
   {
@@ -56,7 +51,6 @@ const FALLBACK_POSTS = [
     caption: 'Bunt, knackig und zuckersüß! Unsere Snacktomaten aus eigenem Anbau sind wieder da. Nur solange der Vorrat reicht im Hofladen. 🍅🥗 #erntefrisch',
     likes: 131,
     comments: 8,
-    date: 'Vor 2 Wochen',
     url: 'https://www.instagram.com/vollmers_hofladen/'
   }
 ];
@@ -145,7 +139,6 @@ export default function BeholdInstagramFeed({ feedId }) {
                       <InstagramIcon className="w-3.5 h-3.5" />
                       @vollmers
                     </span>
-                    <span>{post.date}</span>
                   </div>
 
                   <p className="text-xs line-clamp-3 leading-snug text-white/90">

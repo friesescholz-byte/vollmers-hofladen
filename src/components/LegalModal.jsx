@@ -196,24 +196,11 @@ export default function LegalModal({ isOpen, type = 'impressum', onClose }) {
                 </p>
               </div>
 
-              {/* EU-Streitschlichtung & Verbraucherstreitbeilegung */}
+              {/* Verbraucherstreitbeilegung (§ 36 VSBG) */}
               <div className="space-y-2 pt-2 border-t border-ink-border/60">
-                <h5 className="font-semibold text-ink text-base">Verbraucherstreitbeilegung & Universalschlichtungsstelle:</h5>
+                <h5 className="font-semibold text-ink text-base">Verbraucherstreitbeilegung (§ 36 VSBG):</h5>
                 <p>
-                  Die Europäische Kommission stellt eine Plattform zur Online-Streitbeilegung (OS) bereit, die Sie unter{' '}
-                  <a 
-                    href="https://ec.europa.eu/consumers/odr/" 
-                    target="_blank" 
-                    rel="noreferrer noopener" 
-                    className="text-forest hover:underline font-medium inline-flex items-center gap-1"
-                  >
-                    <span>https://ec.europa.eu/consumers/odr/</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>{' '}
-                  finden. Unsere E-Mail-Adresse finden Sie oben im Impressum.
-                </p>
-                <p>
-                  Wir sind nicht bereit oder verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
+                  Wir sind nicht bereit und nicht verpflichtet, an Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle teilzunehmen.
                 </p>
               </div>
 
