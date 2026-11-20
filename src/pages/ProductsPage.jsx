@@ -150,6 +150,9 @@ export default function ProductsPage({ selectedProductFromSearch }) {
               <p className="text-xs text-ink-muted leading-relaxed">
                 Unser Hofladen basiert auf Vertrauensbasis. Du suchst dir deine Produkte aus, rechnest anhand der Preistafel zusammen und wirfst den Betrag in bar in unsere Kasse.
               </p>
+              <p className="text-[11px] font-medium text-ink/80 pt-2 border-t border-ink-border/50">
+                Auch bargeldlos möglich: EC-Karte, PayPal &amp; Co.
+              </p>
             </div>
 
             <div className="p-5 sm:p-6 rounded-2xl bg-canvas-card border border-ink-border space-y-2">
