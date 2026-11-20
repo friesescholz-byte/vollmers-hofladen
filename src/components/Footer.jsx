@@ -154,7 +154,7 @@ export default function Footer({ onNavigate, onOpenLegal }) {
               <li className="flex items-start gap-2">
                 <MapPin className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  Felix Vollmer Landwirtschaft<br />
+                  Vollmer’s Hofladen<br />
                   Lindenallee 24<br />
                   31177 Harsum (OT Machtsum)
                 </span>

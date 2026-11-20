@@ -51,7 +51,7 @@ export default function LegalModal({ isOpen, type = 'impressum', onClose }) {
                   Rechtliche Informationen
                 </h3>
                 <p className="text-[11px] sm:text-xs text-ink-muted">
-                  Vollmer’s Hofladen & Landwirtschaft • Stand: Oktober 2026
+                  Vollmer’s Hofladen • Stand: Oktober 2026
                 </p>
               </div>
             </div>
@@ -129,7 +129,7 @@ export default function LegalModal({ isOpen, type = 'impressum', onClose }) {
                   Betreiber & Anschrift
                 </span>
                 <p className="text-ink font-semibold text-base leading-snug">
-                  Felix Vollmer Landwirtschaft<br />
+                  Vollmer’s Hofladen<br />
                   <span className="text-ink-muted font-normal text-sm">
                     Inhaber: Felix Vollmer<br />
                     Lindenallee 24<br />
@@ -255,7 +255,7 @@ export default function LegalModal({ isOpen, type = 'impressum', onClose }) {
                   Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) und sonstiger datenschutzrechtlicher Bestimmungen ist:
                 </p>
                 <div className="p-4 rounded-2xl bg-[#F5F2EA] border border-ink-border text-ink">
-                  <strong>Felix Vollmer Landwirtschaft</strong><br />
+                  <strong>Vollmer’s Hofladen</strong><br />
                   Lindenallee 24, 31177 Harsum (Ortsteil Machtsum)<br />
                   Telefon: 0176 21006452<br />
                   E-Mail: info@vollmers-hofladen.de
@@ -467,7 +467,7 @@ export default function LegalModal({ isOpen, type = 'impressum', onClose }) {
 
               <div className="space-y-2">
                 <p>
-                  Felix Vollmer Landwirtschaft legt großen Wert darauf, dass die angebotenen digitalen Dienste und Informationen für alle Menschen – unabhängig von individuellen Einschränkungen oder technischen Gegebenheiten – uneingeschränkt zugänglich und nutzbar sind.
+                  Vollmer’s Hofladen legt großen Wert darauf, dass die angebotenen digitalen Dienste und Informationen für alle Menschen – unabhängig von individuellen Einschränkungen oder technischen Gegebenheiten – uneingeschränkt zugänglich und nutzbar sind.
                 </p>
                 <p>
                   Diese Website wurde unter Berücksichtigung der Richtlinien der <strong>Barrierefreie-Informationstechnik-Verordnung (BITV 2.0)</strong>, der europäischen Norm <strong>EN 301 549</strong> sowie der internationalen <strong>Web Content Accessibility Guidelines (WCAG 2.1 / 2.2 Konformitätsstufe AA)</strong> gestaltet.
@@ -526,7 +526,7 @@ export default function LegalModal({ isOpen, type = 'impressum', onClose }) {
                   Sind Ihnen Mängel beim barrierefreien Zugang zu Inhalten auf unserer Website aufgefallen oder haben Sie Vorschläge zur Verbesserung? Bitte wenden Sie sich jederzeit gerne an uns:
                 </p>
                 <div className="p-4 rounded-2xl bg-[#F5F2EA] border border-ink-border text-xs space-y-2 text-ink">
-                  <strong>Felix Vollmer Landwirtschaft</strong><br />
+                  <strong>Vollmer’s Hofladen</strong><br />
                   Ansprechpartner: Felix Vollmer<br />
                   Lindenallee 24, 31177 Harsum (Ortsteil Machtsum)<br />
                   Telefon: <a href="tel:017621006452" className="text-forest font-semibold hover:underline">0176 21006452</a><br />
