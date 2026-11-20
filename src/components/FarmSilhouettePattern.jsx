@@ -272,11 +272,11 @@ function ContourBand({ className = '' }) {
 const SECTION_PRESETS = {
   'home-pasture': {
     viewBox: '0 0 1440 900',
+    bottomLeftPig: 'durocStanding',
     items: [
       { type: 'henPecking', x: -55, y: 38, scale: 0.92, opacity: 0.9, halo: { cx: 120, cy: 100, r: 175 } },
       { type: 'roosterProud', x: 645, y: 18, scale: 0.48, flipX: true, opacity: 0.72 },
       { type: 'henStanding', x: 1295, y: 72, scale: 0.78, flipX: true, opacity: 0.85 },
-      { type: 'durocStanding', x: 42, y: 585, scale: 0.90, opacity: 0.96, halo: { cx: 160, cy: 105, rx: 220, ry: 125 } },
       { type: 'durocPasture', x: 1210, y: 590, scale: 0.88, flipX: true, opacity: 0.92 },
     ],
     streams: [
@@ -423,6 +423,11 @@ export default function FarmSilhouettePattern({ variant = 'home-cta', className 
       aria-hidden="true"
       className={`pointer-events-none select-none absolute inset-0 overflow-hidden z-0 ${className}`}
     >
+      {preset.bottomLeftPig && (
+        <div className="hidden lg:block absolute bottom-4 xl:bottom-8 left-[390px] xl:left-[420px] 2xl:left-[645px] w-56 xl:w-64 2xl:w-72">
+          <AnimalSilhouette type={preset.bottomLeftPig} showHalo />
+        </div>
+      )}
       <svg
         viewBox={preset.viewBox}
         fill="none"

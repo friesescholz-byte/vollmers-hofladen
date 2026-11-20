@@ -465,6 +465,20 @@ export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
 
+    // Kanonische Weiterleitung: http:// oder www.vollmers-hofladen.de -> https://vollmers-hofladen.de
+    // (wichtig für Google/Bing Suchergebnisse & Favicon-Indexierung; lokale/Preview-Domains bleiben unberührt)
+    if (
+      (request.method === 'GET' || request.method === 'HEAD') &&
+      !url.pathname.startsWith('/api/') &&
+      (
+        url.hostname === 'www.vollmers-hofladen.de' ||
+        (url.hostname === 'vollmers-hofladen.de' && url.protocol === 'http:')
+      )
+    ) {
+      const canonicalUrl = `https://vollmers-hofladen.de${url.pathname}${url.search}`;
+      return Response.redirect(canonicalUrl, 301);
+    }
+
     // 0. Preflight OPTIONS Requests
     if (request.method === 'OPTIONS') {
       return new Response(null, {
